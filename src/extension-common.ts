@@ -61,7 +61,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
     }
 
     const previewProvider = await getPreviewContentProvider(uri);
-    previewProvider.initPreview({
+    await previewProvider.initPreview({
       sourceUri: uri,
       document: editor.document,
       cursorLine: getEditorActiveCursorLine(editor),
@@ -82,7 +82,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
     }
 
     const previewProvider = await getPreviewContentProvider(uri);
-    previewProvider.initPreview({
+    await previewProvider.initPreview({
       sourceUri: uri,
       document: editor.document,
       cursorLine: getEditorActiveCursorLine(editor),
@@ -585,7 +585,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
           );
           */
           const previewProvider = await getPreviewContentProvider(fileUri);
-          previewProvider.initPreview({
+          await previewProvider.initPreview({
             sourceUri: fileUri,
             document,
             cursorLine: line,
@@ -914,7 +914,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
               previewMode === PreviewMode.SinglePreview &&
               !previewProvider.previewHasTheSameSingleSourceUri(sourceUri)
             ) {
-              previewProvider.initPreview({
+              await previewProvider.initPreview({
                 sourceUri,
                 document: editor.document,
                 cursorLine: getEditorActiveCursorLine(editor),
