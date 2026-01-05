@@ -664,6 +664,13 @@
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "markdown-preview-enhanced.openPreviewToTheSide",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "navigation"
+        }
+      ],
       "editor/context": [
         {
           "command": "markdown-preview-enhanced.openPreviewToTheSide",
