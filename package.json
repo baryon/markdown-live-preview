@@ -628,7 +628,7 @@
         "displayName": "%customEditorPreviewDisplayName%",
         "selector": [
           {
-            "filenamePattern": "*.{md,markdown,mdown,mkdn,mkd,rmd,qmd}"
+            "filenamePattern": "*.{md,markdown,mdown,mkdn,mkd,rmd,qmd,mdx}"
           }
         ],
         "priority": "option"
@@ -639,42 +639,42 @@
         "command": "markdown-preview-enhanced.openPreviewToTheSide",
         "key": "ctrl+k v",
         "mac": "cmd+k v",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
       },
       {
         "command": "markdown-preview-enhanced.openPreview",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
       },
       {
         "command": "markdown-preview-enhanced.runAllCodeChunks",
         "key": "ctrl+shift+enter",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
       },
       {
         "command": "markdown-preview-enhanced.runCodeChunk",
         "key": "shift+enter",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
       },
       {
         "command": "markdown-preview-enhanced.syncPreview",
         "key": "ctrl+shift+s",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "markdown-preview-enhanced.openPreviewToTheSide",
-          "when": "editorLangId == markdown",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
           "group": "markdown-preview-enhanced"
         }
       ],
       "editor/title": [
         {
           "command": "markdown-preview-enhanced.openPreviewToTheSide",
-          "when": "editorLangId == markdown",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
           "group": "navigation"
         }
       ]
@@ -682,7 +682,8 @@
   },
   "activationEvents": [
     "onLanguage:markdown",
-    "onLanguage:quarto"
+    "onLanguage:quarto",
+    "onLanguage:mdx"
   ],
   "husky": {
     "hooks": {

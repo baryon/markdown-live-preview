@@ -7,17 +7,18 @@
 
 典型流程（以 `PreviewMode.SinglePreview` 为例）：
 
-1) 用户打开预览：`openPreview/openPreviewToTheSide` → `PreviewProvider.initPreview`  
-2) `initPreview` 调用 `engine.generateHTMLTemplateForPreview(...)` 并设置 `webview.html`  
-3) Webview 前端加载完成后，向扩展发消息 `_crossnote.webviewFinishLoading`  
-4) 扩展收到 `_crossnote.webviewFinishLoading` → `webviewFinishLoading` → `previewProvider.updateMarkdown(sourceUri)`  
-5) `updateMarkdown`：
+1. 用户打开预览：`openPreview/openPreviewToTheSide` → `PreviewProvider.initPreview`
+2. `initPreview` 调用 `engine.generateHTMLTemplateForPreview(...)` 并设置 `webview.html`
+3. Webview 前端加载完成后，向扩展发消息 `_crossnote.webviewFinishLoading`
+4. 扩展收到 `_crossnote.webviewFinishLoading` → `webviewFinishLoading` → `previewProvider.updateMarkdown(sourceUri)`
+5. `updateMarkdown`：
    - `postMessageToPreview(... startParsingMarkdown ...)`（UI 进入“加载中”）
    - `engine.parseMD(...)`（解析 Markdown）
    - 若资源依赖变更：`refreshPreview` → `initPreview`（重新加载 iframe/模板）
    - 否则：`postMessageToPreview(... updateHtml ...)`（Webview 更新正文）
 
 核心入口位置：
+
 - `src/extension-common.ts`：`webviewFinishLoading`、`onDidChangeTextDocument`、`onDidChangeActiveTextEditor`
 - `src/preview-provider.ts`：`initPreview`、`updateMarkdown`、`postMessageToPreview`、`getPreviews`
 
@@ -26,12 +27,14 @@
 ### 2.1 单预览模式下，消息路由没有绑定“当前目标文档”，极易被旧请求污染
 
 在 `PreviewMode.SinglePreview`：
+
 - `PreviewProvider.getPreviews(sourceUri)` 只要单预览面板存在，就无条件返回 `[singlePreviewPanel]`（不校验 `sourceUri` 是否等于当前 `singlePreviewPanelSourceUriTarget`）。
 - `PreviewProvider.isPreviewOn(sourceUri)` 在单预览模式也只要面板存在就返回 `true`。
 
 结果：只要扩展侧任何地方触发了 `postMessageToPreview(sourceUri, ...)` / `updateMarkdown(sourceUri)`，消息都会发送到“当前这个唯一的面板”，不管它此刻展示的到底是哪一个文档。
 
 这会制造非常典型的竞态场景：
+
 - 你从文档 A 切到文档 B（`onDidChangeActiveTextEditor` 触发 `initPreview(B)`，面板开始加载 B）。
 - A 的某个异步回调稍后才到（例如 Webview 前端仍在回调 `_crossnote.webviewFinishLoading(A)`，或 A 的 `onDidChangeTextDocument`、文件监听触发 `updateMarkdown(A)`）。
 - 扩展向单一面板发送 `startParsingMarkdown`（UI 变“Loading”），随后解析 A 并发送 `updateHtml(A)`。
@@ -39,6 +42,7 @@
 - 如果 Webview 前端不做过滤，则会出现：**B 的预览被 A 的内容覆盖**（用户感知为“预览不对 / 空白 / 闪烁”）。
 
 同类污染源非常多（均会在单预览模式下误投递到当前面板）：
+
 - `src/extension-common.ts` 的 `onDidChangeTextDocument`（后台文档编辑也会触发）
 - `src/file-watcher.ts` 的 `updatedNote/createdNote/deletedNote`
 - 任何对 `postMessageToPreview(uri, ...)` 的调用（滚动同步、backlinks 等）
@@ -48,6 +52,7 @@
 ### 2.2 缺少“渲染请求版本号/取消机制”，旧的 parse 结果会覆盖新的状态
 
 `updateMarkdown` 内部是串行 await（先 `startParsingMarkdown` → 再 `parseMD` → 再 `updateHtml/refreshPreview`），但它本身可能被并发触发：
+
 - Webview 加载完成回调触发一次
 - Live update（`onDidChangeTextDocument` + debounce）触发多次
 - 配置变化触发 `refreshAllPreviews`，间接触发 `initPreview` → Webview 再触发 loading 回调
@@ -64,7 +69,7 @@
 
 则会触发：
 
-`parseMD` → 发现资源变化 → `refreshPreview` → Webview 重新加载 → `_crossnote.webviewFinishLoading` → `updateMarkdown` → …  
+`parseMD` → 发现资源变化 → `refreshPreview` → Webview 重新加载 → `_crossnote.webviewFinishLoading` → `updateMarkdown` → …
 
 用户侧表现为：预览反复 reload、长期停留在 Loading、或短暂白屏。
 
@@ -85,16 +90,18 @@
 
 ## 4. 建议的排查与观测（优先做，能快速定位“偶现”）
 
-1) 增加扩展侧日志（建议 OutputChannel）记录：
+1. 增加扩展侧日志（建议 OutputChannel）记录：
+
    - 时间戳、`sourceUri`、当前 `singlePreviewPanelSourceUriTarget`、触发源（webviewFinishLoading / onDidChangeTextDocument / refreshAllPreviews）
    - 每次 `updateMarkdown` 分配递增 `renderRequestId`
    - `startParsingMarkdown` / `updateHtml` / `refreshPreview` 是否成对出现
 
-2) 增加 Webview 前端错误回传（需要在 `crossnote` 模板里做，或在模板 head 注入）：
+2. 增加 Webview 前端错误回传（需要在 `crossnote` 模板里做，或在模板 head 注入）：
+
    - `window.onerror` / `unhandledrejection` 将错误 `postMessage` 回扩展
    - 记录收到的 `sourceUri` 与当前页面状态（是否忽略旧消息）
 
-3) 针对“切换第二个文档卡 Loading”做最小复现脚本：
+3. 针对“切换第二个文档卡 Loading”做最小复现脚本：
    - 打开 A 预览
    - 立刻切换到 B（连续快速切换更容易触发）
    - 同时让 A 有后台事件（编辑 A、保存、触发文件 watcher）
@@ -105,6 +112,7 @@
 ### 5.1 单预览模式：只允许“当前 target 文档”驱动面板（强烈建议）
 
 在扩展侧增加硬性约束，至少满足之一：
+
 - `getPreviews(sourceUri)` 在单预览模式下仅当 `sourceUri.fsPath === singlePreviewPanelSourceUriTarget.fsPath` 时才返回面板；否则返回 `null`。
 - 或者在 `postMessageToPreview` / `updateMarkdown` 开头：若单预览且 `sourceUri` 不等于 target，则直接 `return`（或仅允许少数全局消息通过）。
 
@@ -113,6 +121,7 @@
 ### 5.2 引入 `renderRequestId` / 可取消的渲染任务（建议）
 
 思路：每个面板（或每个 `sourceUri`）维护一个递增版本号：
+
 - `updateMarkdown` 开始时记录本次 id
 - `parseMD` 完成后若 id 不是最新，则丢弃结果，不再发送 `updateHtml` / `refreshPreview`
 
@@ -121,6 +130,7 @@
 ### 5.3 稳定化 `JSAndCssFiles` 比较（建议）
 
 在比较前做规范化：
+
 - 去重、排序、过滤明显的易变项（如带时间戳 query）
 - 用稳定的 key（例如只比较 pathname + hash 或只比较集合）判断是否需要 `refreshPreview`
 
@@ -129,11 +139,13 @@
 ### 5.4 处理后台面板更新策略（视需求）
 
 如果希望后台面板也保持新内容：
+
 - 不要用 `preview.visible` 作为唯一条件；或为不可见面板缓存“待更新”的最后一条消息，切换可见时补发。
 
 ### 5.5 Web 扩展资源根（若你需要支持 web 版，建议专项验证）
 
 核对 `localResourceRoots` 与 `crossnoteBuildDirectory` 的使用是否符合 VSCode Webview 约束，必要时区分：
+
 - 本地打包资源（file）
 - 远程 CDN 资源（https，受 CSP/allowlist 影响）
 
@@ -143,4 +155,3 @@
 
 - **单预览模式下，消息/渲染任务没有绑定当前目标文档，导致旧文档的异步任务（webviewFinishLoading、live update、file watcher 等）污染当前面板**；
 - 再叠加 **缺少渲染请求版本控制** 与 **资源依赖变更判定可能不稳定**，使得问题呈现为“偶发、难复现、与切换/刷新/后台事件强相关”。
-

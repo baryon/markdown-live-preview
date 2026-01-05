@@ -88,8 +88,10 @@ export function getAllPreviewProviders(): PreviewProvider[] {
 export class PreviewProvider {
   private updateTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private initRequestSeq = 0;
-  private latestInitRequestByPreview: WeakMap<vscode.WebviewPanel, number> =
-    new WeakMap();
+  private latestInitRequestByPreview: WeakMap<
+    vscode.WebviewPanel,
+    number
+  > = new WeakMap();
   private renderRequestSeq = 0;
   private latestRenderRequestBySourceUri: Map<string, number> = new Map();
 
