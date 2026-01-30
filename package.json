@@ -1,7 +1,7 @@
 {
   "name": "markdown-preview-enhanced",
   "displayName": "%displayName%",
-  "version": "0.8.20",
+  "version": "0.8.21",
   "description": "%description%",
   "categories": [
     "Other"
@@ -24,7 +24,8 @@
   "main": "./out/native/extension.js",
   "browser": "./out/web/extension.js",
   "scripts": {
-    "build": "gulp copy-files && gulp clean-out && node build.js",
+    "build": "node build.js",
+    "watch": "node build.js --watch",
     "package": "vsce package --no-dependencies",
     "package:pre": "yarn build && vsce package --no-dependencies --pre-release",
     "check:all": "yarn check:eslint && yarn check:prettier",
@@ -37,8 +38,7 @@
     "run-in-browser": "concurrently \"vscode-test-web --browserType=chromium --extensionDevelopmentPath=. $SERVE_DIR\" \"npx http-server ./crossnote -p 6789 --cors\"",
     "run-in-vscode-dev": "npx serve --cors -l 5000 --ssl-cert $HOME/certs/localhost.pem --ssl-key $HOME/certs/localhost-key.pem",
     "test": "yarn build && node ./node_modules/vscode/bin/test",
-    "vscode:prepublish": "yarn install && yarn build",
-    "watch": "gulp copy-files && gulp clean-out && node build.js --watch"
+    "vscode:prepublish": "yarn install && yarn build"
   },
   "contributes": {
     "commands": [
@@ -722,7 +722,6 @@
     "esbuild": "^0.25.0",
     "esbuild-plugin-polyfill-node": "^0.3.0",
     "eslint": "^8.48.0",
-    "gulp": "^4.0.2",
     "http-server": "^14.1.1",
     "husky": "^8.0.3",
     "lint-staged": "^9.4.2",

@@ -96,6 +96,12 @@ export class PreviewProvider {
   private latestRenderRequestBySourceUri: Map<string, number> = new Map();
 
   /**
+   * Tracks the latest init request ID for each sourceUri.
+   * Used to validate webviewFinishLoading callbacks.
+   */
+  private latestInitRequestBySourceUri: Map<string, number> = new Map();
+
+  /**
    * Each PreviewProvider has a one notebook.
    */
   private notebook: Notebook;
@@ -277,6 +283,9 @@ export class PreviewProvider {
       PreviewProvider.singlePreviewPanelSourceUriTarget = null;
       this.previewToDocumentMap = new Map();
       this.previewMaps = new Map();
+      // Clear all tracking maps in single preview mode
+      this.latestInitRequestBySourceUri.clear();
+      this.latestRenderRequestBySourceUri.clear();
     } else {
       const previews = this.getPreviews(sourceUri);
       if (previews) {
@@ -285,6 +294,10 @@ export class PreviewProvider {
           this.deletePreviewFromMap(sourceUri, preview);
         });
       }
+      // Clean up tracking for this specific sourceUri
+      const sourceUriString = sourceUri.toString();
+      this.latestInitRequestBySourceUri.delete(sourceUriString);
+      this.latestRenderRequestBySourceUri.delete(sourceUriString);
     }
   }
 
@@ -445,6 +458,8 @@ export class PreviewProvider {
     try {
       const initRequestId = ++this.initRequestSeq;
       this.latestInitRequestByPreview.set(previewPanel, initRequestId);
+      // Track init request by sourceUri for webviewFinishLoading validation
+      this.latestInitRequestBySourceUri.set(sourceUri.toString(), initRequestId);
 
       const html = await engine.generateHTMLTemplateForPreview({
         inputString,
@@ -496,6 +511,9 @@ export class PreviewProvider {
     // Clear all pending update timeouts
     this.updateTimeouts.forEach((timeout) => clearTimeout(timeout));
     this.updateTimeouts.clear();
+    // Clear all tracking maps
+    this.latestInitRequestBySourceUri.clear();
+    this.latestRenderRequestBySourceUri.clear();
     // this.engineMaps = {};
     PreviewProvider.singlePreviewPanel = null;
     PreviewProvider.singlePreviewPanelSourceUriTarget = null;
@@ -542,6 +560,20 @@ export class PreviewProvider {
         sourceUri.fsPath
       );
     }
+  }
+
+  /**
+   * Check if updateMarkdown should proceed for the given sourceUri.
+   * Returns false if:
+   * - In SinglePreview mode and sourceUri is not the current target
+   * - Preview is not initialized or has been disposed
+   */
+  public shouldUpdateMarkdown(sourceUri: Uri): boolean {
+    if (!this.isSinglePreviewTarget(sourceUri)) {
+      return false;
+    }
+    const previews = this.getPreviews(sourceUri);
+    return !!(previews && previews.length > 0);
   }
 
   public updateMarkdown(sourceUri: Uri, triggeredBySave?: boolean) {

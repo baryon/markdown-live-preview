@@ -224,6 +224,16 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
     const sourceUri = vscode.Uri.parse(uri);
     const previewProvider = await getPreviewContentProvider(sourceUri);
     notebooksManager.setSystemColorScheme(systemColorScheme);
+
+    // Validate that this sourceUri is still the active preview target
+    // This prevents stale webviewFinishLoading callbacks from updating wrong content
+    if (!previewProvider.shouldUpdateMarkdown(sourceUri)) {
+      console.debug(
+        `[MPE] Skipping webviewFinishLoading for stale sourceUri: ${sourceUri.fsPath}`,
+      );
+      return;
+    }
+
     previewProvider.updateMarkdown(sourceUri);
   }
 
