@@ -540,7 +540,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
   }
 
   async function openSponsors() {
-    const url = 'https://github.com/sponsors/shd101wyy/';
+    const url = 'https://github.com/sponsors/baryon/';
     vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(url));
   }
 
