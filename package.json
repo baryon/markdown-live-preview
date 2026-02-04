@@ -1,0 +1,658 @@
+{
+  "name": "markdown-live-preview",
+  "displayName": "%displayName%",
+  "version": "0.9.0",
+  "description": "%description%",
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "markdown"
+  ],
+  "bugs": {
+    "url": "https://github.com/baryon/markdown-live-preview/issues"
+  },
+  "repository": "https://github.com/baryon/markdown-live-preview.git",
+  "license": "MIT",
+  "contributors": [
+    "baryon",
+    "claude code"
+  ],
+  "publisher": "baryon",
+  "main": "./out/native/extension.js",
+  "browser": "./out/web/extension.js",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "package": "vsce package --no-dependencies",
+    "package:pre": "pnpm build && vsce package --no-dependencies --pre-release",
+    "check": "biome check .",
+    "fix": "biome check --write .",
+    "run-in-browser": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. $SERVE_DIR",
+    "vscode:prepublish": "pnpm install && pnpm build"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "markdown-live-preview.openPreviewToTheSide",
+        "title": "%markdown-live-preview.openPreviewToTheSide.title%",
+        "category": "Markdown",
+        "icon": {
+          "light": "./media/preview-right-light.svg",
+          "dark": "./media/preview-right-dark.svg"
+        }
+      },
+      {
+        "command": "markdown-live-preview.openPreview",
+        "title": "%markdown-live-preview.openPreview.title%",
+        "category": "Markdown",
+        "icon": {
+          "light": "./media/preview-right-light.svg",
+          "dark": "./media/preview-right-dark.svg"
+        }
+      },
+      {
+        "command": "markdown-live-preview.toggleScrollSync",
+        "title": "%markdown-live-preview.toggleScrollSync.title%"
+      },
+      {
+        "command": "markdown-live-preview.toggleLiveUpdate",
+        "title": "%markdown-live-preview.toggleLiveUpdate.title%"
+      },
+      {
+        "command": "markdown-live-preview.toggleBreakOnSingleNewLine",
+        "title": "%markdown-live-preview.toggleBreakOnSingleNewLine.title%"
+      },
+      {
+        "command": "markdown-live-preview.openImageHelper",
+        "title": "%markdown-live-preview.openImageHelper.title%"
+      },
+      {
+        "command": "markdown-live-preview.syncPreview",
+        "title": "%markdown-live-preview.syncPreview.title%"
+      },
+      {
+        "command": "markdown-live-preview.customizeCss",
+        "title": "%markdown-live-preview.customizeCss.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.insertNewSlide",
+        "title": "%markdown-live-preview.insertNewSlide.title%"
+      },
+      {
+        "command": "markdown-live-preview.insertTable",
+        "title": "%markdown-live-preview.insertTable.title%"
+      },
+      {
+        "command": "markdown-live-preview.insertPagebreak",
+        "title": "%markdown-live-preview.insertPagebreak.title%"
+      },
+      {
+        "command": "markdown-live-preview.createTOC",
+        "title": "%markdown-live-preview.createTOC.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.openConfigScript",
+        "title": "%markdown-live-preview.openConfigScript.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.extendParser",
+        "title": "%markdown-live-preview.extendParser.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.customizePreviewHtmlHead",
+        "title": "%markdown-live-preview.customizePreviewHtmlHead.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.showUploadedImages",
+        "title": "%markdown-live-preview.showUploadedImages.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.switchToEditMode",
+        "title": "%markdown-live-preview.switchToEditMode.title%"
+      },
+      {
+        "command": "markdown-live-preview.switchToPreviewMode",
+        "title": "%markdown-live-preview.switchToPreviewMode.title%"
+      },
+      {
+        "command": "markdown-live-preview.switchToSideBySideMode",
+        "title": "%markdown-live-preview.switchToSideBySideMode.title%"
+      },
+      {
+        "command": "markdown-live-preview.runCodeChunk",
+        "title": "%markdown-live-preview.runCodeChunk.title%",
+        "enablement": "!isWeb"
+      },
+      {
+        "command": "markdown-live-preview.runAllCodeChunks",
+        "title": "%markdown-live-preview.runAllCodeChunks.title%",
+        "enablement": "!isWeb"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Markdown Live Preview",
+      "properties": {
+        "markdown-live-preview.configPath": {
+          "markdownDescription": "Restart is required after changes. The global configuration directory path.",
+          "default": "",
+          "type": "string"
+        },
+        "markdown-live-preview.breakOnSingleNewLine": {
+          "description": "In Markdown, a single newline character doesn't cause a line break in the generated HTML. In GitHub Flavored Markdown, that is not true. Enable this config option to insert line breaks in rendered HTML for single newlines in Markdown source.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.scrollSync": {
+          "description": "Automatic scroll sync. This is now partially supported.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.liveUpdate": {
+          "description": "Re-render the preview as the contents of the source changes, without requiring the source buffer to be saved. If disabled, the preview is re-rendered only when the buffer is saved to disk.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.liveUpdateDebounceMs": {
+          "description": "Debounce time in milliseconds for live updates.",
+          "default": 300,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "markdown-live-preview.previewMode": {
+          "markdownDescription": "- **Single Preview**: Only one preview will be shown for all editors.\n- **Multiple Previews**: Multiple previews will be shown. Each editor has its own preview.\n- **Previews Only**: No editor will be shown. Only previews will be shown.\n\nRestart is required after changes.",
+          "type": "string",
+          "enum": [
+            "Single Preview",
+            "Multiple Previews",
+            "Previews Only"
+          ],
+          "default": "Single Preview"
+        },
+        "markdown-live-preview.automaticallyShowPreviewOfMarkdownBeingEdited": {
+          "description": "Automatically show preview of markdown being edited.",
+          "default": false,
+          "type": "boolean"
+        },
+        "markdown-live-preview.disableAutoPreviewForUriSchemes": {
+          "markdownDescription": "A list of URI schemes (e.g., `vscode-notebook-cell`) to exclude from the `automaticallyShowPreviewOfMarkdownBeingEdited` feature.",
+          "default": [
+            "vscode-notebook-cell"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "markdown-live-preview.previewColorScheme": {
+          "type": "string",
+          "enum": [
+            "selectedPreviewTheme",
+            "systemColorScheme",
+            "editorColorScheme"
+          ],
+          "default": "selectedPreviewTheme",
+          "markdownEnumDescriptions": [
+            "Use the `markdown-live-preview.previewTheme` setting.",
+            "Follow system color scheme. The preview theme will automatically switch between light and dark variants.",
+            "Use the same theme as the editor (light or dark)."
+          ]
+        },
+        "markdown-live-preview.enableTypographer": {
+          "description": "Enable smartypants and other sweet transforms.",
+          "default": false,
+          "type": "boolean"
+        },
+        "markdown-live-preview.mathRenderingOption": {
+          "description": "Choose the Math expression rendering method here. You can also disable math rendering if you want by choosing 'None'.",
+          "default": "KaTeX",
+          "type": "string",
+          "enum": [
+            "KaTeX",
+            "MathJax",
+            "None"
+          ]
+        },
+        "markdown-live-preview.mathInlineDelimiters": {
+          "description": "Use customized Math expression inline delimiters.",
+          "default": [
+            [
+              "$",
+              "$"
+            ],
+            [
+              "\\(",
+              "\\)"
+            ]
+          ],
+          "type": "array"
+        },
+        "markdown-live-preview.mathBlockDelimiters": {
+          "description": "Use customized Math expression block delimiters.",
+          "default": [
+            [
+              "$$",
+              "$$"
+            ],
+            [
+              "\\[",
+              "\\]"
+            ]
+          ],
+          "type": "array"
+        },
+        "markdown-live-preview.mathjaxV3ScriptSrc": {
+          "description": "MathJax v3 script source. Leave it empty to use the default CDN.",
+          "default": "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
+          "type": "string"
+        },
+        "markdown-live-preview.enableWikiLinkSyntax": {
+          "description": "Enable Wiki Link syntax support.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.enableLinkify": {
+          "description": "Enable or disable conversion of URL-like text to links in the markdown preview.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.useGitHubStylePipedLink": {
+          "description": "If checked, we use GitHub style piped wiki links, i.e. [[linkText|wikiLink]]. Otherwise, we use [[wikiLink|linkText]] as the original Wikipedia style.",
+          "default": false,
+          "type": "boolean"
+        },
+        "markdown-live-preview.enableEmojiSyntax": {
+          "description": "Enable emoji & font-awesome plugin.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.wikiLinkTargetFileExtension": {
+          "markdownDescription": "The file extension for the link in wikilink if the link does not have an extension.",
+          "default": ".md",
+          "type": "string"
+        },
+        "markdown-live-preview.wikiLinkTargetFileNameChangeCase": {
+          "markdownDescription": "The case for the file name in wikilink.",
+          "default": "none",
+          "type": "string",
+          "enum": [
+            "none",
+            "camelCase",
+            "pascalCase",
+            "kebabCase",
+            "snakeCase",
+            "constantCase",
+            "lowerCase",
+            "upperCase"
+          ]
+        },
+        "markdown-live-preview.frontMatterRenderingOption": {
+          "description": "Front matter rendering option",
+          "type": "string",
+          "enum": [
+            "none",
+            "table",
+            "code block"
+          ],
+          "default": "none"
+        },
+        "markdown-live-preview.mermaidTheme": {
+          "description": "Mermaid theme (beautiful-mermaid)",
+          "default": "github-light",
+          "type": "string",
+          "enum": [
+            "zinc-light",
+            "zinc-dark",
+            "tokyo-night",
+            "tokyo-night-storm",
+            "tokyo-night-light",
+            "catppuccin-mocha",
+            "catppuccin-latte",
+            "nord",
+            "nord-light",
+            "dracula",
+            "github-light",
+            "github-dark",
+            "solarized-light",
+            "solarized-dark",
+            "one-dark"
+          ]
+        },
+        "markdown-live-preview.mermaidAsciiMode": {
+          "description": "Render mermaid diagrams as ASCII/Unicode text art instead of SVG",
+          "type": "boolean",
+          "default": false
+        },
+        "markdown-live-preview.codeBlockTheme": {
+          "description": "Code block theme. If `auto` is chosen, then the code block theme that best matches the current preview theme will be picked.",
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "github-dark",
+            "github-light",
+            "monokai",
+            "one-dark-pro",
+            "dracula",
+            "nord",
+            "material-theme-darker",
+            "material-theme-lighter",
+            "solarized-dark",
+            "solarized-light",
+            "vitesse-dark",
+            "vitesse-light"
+          ]
+        },
+        "markdown-live-preview.previewTheme": {
+          "description": "Preview Theme",
+          "default": "github-light.css",
+          "type": "string",
+          "enum": [
+            "atom-dark.css",
+            "atom-light.css",
+            "atom-material.css",
+            "github-dark.css",
+            "github-light.css",
+            "gothic.css",
+            "medium.css",
+            "monokai.css",
+            "newsprint.css",
+            "night.css",
+            "none.css",
+            "one-dark.css",
+            "one-light.css",
+            "solarized-dark.css",
+            "solarized-light.css",
+            "vue.css"
+          ]
+        },
+        "markdown-live-preview.revealjsTheme": {
+          "description": "RevealJS Presentation Theme",
+          "default": "white.css",
+          "type": "string",
+          "enum": [
+            "beige.css",
+            "black.css",
+            "blood.css",
+            "league.css",
+            "moon.css",
+            "night.css",
+            "serif.css",
+            "simple.css",
+            "sky.css",
+            "solarized.css",
+            "white.css",
+            "none.css"
+          ]
+        },
+        "markdown-live-preview.imageFolderPath": {
+          "description": "When using Image Helper to copy images, by default images will be copied to root image folder path '/assets'",
+          "default": "/assets",
+          "type": "string"
+        },
+        "markdown-live-preview.imageUploader": {
+          "description": "You can choose different image uploader to upload image",
+          "default": "imgur",
+          "type": "string",
+          "enum": [
+            "imgur",
+            "sm.ms",
+            "qiniu"
+          ]
+        },
+        "markdown-live-preview.qiniuAccessKey": {
+          "type": "string",
+          "default": "",
+          "description": "Qiniu AccessKey"
+        },
+        "markdown-live-preview.qiniuSecretKey": {
+          "type": "string",
+          "default": "",
+          "description": "Qiniu SecretKey"
+        },
+        "markdown-live-preview.qiniuBucket": {
+          "type": "string",
+          "default": "",
+          "description": "Qiniu Bucket"
+        },
+        "markdown-live-preview.qiniuDomain": {
+          "type": "string",
+          "default": "http://",
+          "description": "Qiniu Domain"
+        },
+        "markdown-live-preview.hideDefaultVSCodeMarkdownPreviewButtons": {
+          "description": "Hide the default VSCode markdown preview extension buttons. Restarting the editor is required to make this config take effect.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.jsdelivrCdnHost": {
+          "markdownDescription": "jsDelivr CDN host. Example values: `cdn.jsdelivr.net`, `fastly.jsdelivr.net`, `gcore.jsdelivr.net`, `testingcf.jsdelivr.net`",
+          "default": "cdn.jsdelivr.net",
+          "type": "string"
+        },
+        "markdown-live-preview.markdownFileExtensions": {
+          "description": "Markdown file extensions. This is used to determine whether to show the preview button in the markdown file context menu.",
+          "default": [
+            ".md",
+            ".markdown",
+            ".mdown",
+            ".mkdn",
+            ".mkd",
+            ".rmd",
+            ".qmd",
+            ".mdx"
+          ],
+          "type": "array"
+        },
+        "markdown-live-preview.enablePreviewZenMode": {
+          "description": "Enable this option will hide unnecessary UI elements in preview unless your mouse is over it.",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.markdownOpenMode": {
+          "markdownDescription": "Default mode when opening Markdown files.\n- **edit**: Editor only\n- **preview**: Preview only\n- **side-by-side**: Editor + Preview side by side",
+          "type": "string",
+          "enum": [
+            "edit",
+            "preview",
+            "side-by-side"
+          ],
+          "enumDescriptions": [
+            "Open markdown files in editor only",
+            "Open markdown files in preview only",
+            "Open markdown files with editor and preview side by side"
+          ],
+          "default": "side-by-side"
+        },
+        "markdown-live-preview.enableScriptExecution": {
+          "markdownDescription": "Enable script execution for code chunks. **WARNING: This allows running arbitrary code.** Only enable if you trust the markdown files you open.",
+          "default": false,
+          "type": "boolean"
+        },
+        "markdown-live-preview.codeChunkDefaultShell": {
+          "description": "Default shell for code chunk execution (e.g., bash, zsh, powershell). Leave empty to use system default.",
+          "default": "",
+          "type": "string"
+        },
+        "markdown-live-preview.latexEngine": {
+          "description": "LaTeX engine for rendering LaTeX code chunks.",
+          "default": "pdflatex",
+          "type": "string",
+          "enum": [
+            "pdflatex",
+            "xelatex",
+            "lualatex"
+          ]
+        },
+        "markdown-live-preview.codeChunkExecutionTimeout": {
+          "description": "Timeout in milliseconds for code chunk execution.",
+          "default": 30000,
+          "type": "number",
+          "minimum": 1000,
+          "maximum": 300000
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "markdown-live-preview",
+        "displayName": "%customEditorPreviewDisplayName%",
+        "selector": [
+          {
+            "filenamePattern": "*.{md,markdown,mdown,mkdn,mkd,rmd,qmd,mdx}"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "markdown-live-preview.openPreviewToTheSide",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+      },
+      {
+        "command": "markdown-live-preview.openPreview",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+      },
+      {
+        "command": "markdown-live-preview.syncPreview",
+        "key": "ctrl+shift+s",
+        "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+      },
+      {
+        "command": "markdown-live-preview.runCodeChunk",
+        "key": "shift+enter",
+        "when": "markdown-live-preview.enableScriptExecution && (editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i)"
+      },
+      {
+        "command": "markdown-live-preview.runAllCodeChunks",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "markdown-live-preview.enableScriptExecution && (editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "markdown-live-preview.openPreviewToTheSide",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "markdown-live-preview.openPreviewToTheSide",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "markdown-live-preview"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "markdown-live-preview.openPreviewToTheSide",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "markdown-live-preview.switchToEditMode",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "markdown-live-preview@1"
+        },
+        {
+          "command": "markdown-live-preview.switchToPreviewMode",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "markdown-live-preview@2"
+        },
+        {
+          "command": "markdown-live-preview.switchToSideBySideMode",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i",
+          "group": "markdown-live-preview@3"
+        }
+      ],
+      "webview/title/context": [
+        {
+          "command": "markdown-live-preview.switchToEditMode",
+          "when": "activeWebviewPanelId == 'markdown-live-preview'",
+          "group": "markdown-live-preview@1"
+        },
+        {
+          "command": "markdown-live-preview.switchToPreviewMode",
+          "when": "activeWebviewPanelId == 'markdown-live-preview'",
+          "group": "markdown-live-preview@2"
+        },
+        {
+          "command": "markdown-live-preview.switchToSideBySideMode",
+          "when": "activeWebviewPanelId == 'markdown-live-preview'",
+          "group": "markdown-live-preview@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "markdown-live-preview.switchToEditMode",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+        },
+        {
+          "command": "markdown-live-preview.switchToPreviewMode",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+        },
+        {
+          "command": "markdown-live-preview.switchToSideBySideMode",
+          "when": "editorLangId == markdown || editorLangId == quarto || resourceExtname =~ /\\.(md|markdown|mdown|mkdn|mkd|rmd|qmd|mdx)$/i"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:quarto",
+    "onLanguage:mdx"
+  ],
+  "dependencies": {
+    "@marp-team/marp-core": "^4.2.0",
+    "async-mutex": "^0.4.0",
+    "beautiful-mermaid": "^0.1.3",
+    "katex": "^0.16.21",
+    "markdown-it": "^14.1.0",
+    "markdown-it-emoji": "^3.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-sub": "^2.0.0",
+    "markdown-it-sup": "^2.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "shiki": "^1.29.2",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "16",
+    "@types/vscode": "1.70.0",
+    "@biomejs/biome": "^2.0.0",
+    "@vscode/test-web": "^0.0.67",
+    "esbuild": "^0.25.0",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
+    "typescript": "^5.2.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@playwright/browser-chromium"
+    ]
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "icon": "media/mlp.png"
+}

@@ -1,0 +1,9 @@
+.vscode-test
+*.vsix
+node_modules
+out
+.direnv
+.vscode-test-web
+pnpm-debug.log
+.claude/settings.local.json
+.playwright-mcp
