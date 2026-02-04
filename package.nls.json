@@ -1,6 +1,6 @@
 {
   "displayName": "Markdown Live Preview",
-  "description": "A modern Markdown preview extension for VS Code with live update, scroll sync, and rich rendering support",
+  "description": "Markdown preview with Mermaid diagrams, KaTeX math, Marp slides, MDX, code execution, and 20+ diagram languages via Kroki — built for the AI era",
   "customEditorPreviewDisplayName": "Markdown Live Preview",
   "markdown-live-preview.openPreviewToTheSide.title": "Markdown Live Preview: Open Preview to the Side",
   "markdown-live-preview.openPreview.title": "Markdown Live Preview: Open Preview",

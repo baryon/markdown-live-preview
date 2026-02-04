@@ -1,6 +1,6 @@
 {
   "displayName": "Markdown 实时预览",
-  "description": "一款现代化的 VS Code Markdown 预览扩展，支持实时更新、滚动同步和丰富的渲染功能",
+  "description": "Markdown 预览：Mermaid 图表、KaTeX 数学公式、Marp 演示文稿、MDX、代码执行，通过 Kroki 支持 20+ 种图表语言 —— 为 AI 时代而生",
   "customEditorPreviewDisplayName": "Markdown 实时预览",
   "markdown-live-preview.openPreviewToTheSide.title": "MLP：打开侧边预览",
   "markdown-live-preview.openPreview.title": "MLP：打开预览",

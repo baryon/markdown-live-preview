@@ -1,14 +1,24 @@
 {
-  "name": "markdown-live-preview",
+  "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "%description%",
+  "icon": "media/mlp.png",
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
   "keywords": [
-    "markdown"
+    "markdown",
+    "preview",
+    "mermaid",
+    "katex",
+    "marp"
   ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "bugs": {
     "url": "https://github.com/baryon/markdown-live-preview/issues"
   },
@@ -653,6 +663,5 @@
   },
   "engines": {
     "vscode": "^1.70.0"
-  },
-  "icon": "media/mlp.png"
+  }
 }

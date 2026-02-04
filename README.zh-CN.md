@@ -2,9 +2,19 @@
 
 # Markdown Live Preview
 
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
+
 一款现代化的 VS Code Markdown 预览扩展 —— 为 AI 时代而生，文档先生成，再阅读。
 
 > 预览优先。因为在 AI 时代，你阅读的 Markdown 远多于你编写的。
+
+## 截图
+
+| 多种图像格式 | MDX 支持 |
+|:---:|:---:|
+| ![多种图像格式](screenshots/screenshoot-1.png) | ![MDX 支持](screenshots/screenshoot-2.png) |
+| **Marp 演示文稿** | **ASCII Mermaid** |
+| ![Marp 演示文稿](screenshots/screenshoot-3.png) | ![ASCII Mermaid](screenshots/screenshoot-4.png) |
 
 ## 为什么选择这个扩展
 

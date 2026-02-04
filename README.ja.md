@@ -2,9 +2,19 @@
 
 # Markdown Live Preview
 
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
+
 モダンな VS Code Markdown プレビュー拡張機能 —— ドキュメントがまず生成され、次に読まれる AI 時代のために構築されました。
 
 > プレビューファースト。AI の時代では、Markdown は書くよりも読むほうが多いから。
+
+## スクリーンショット
+
+| 画像フォーマット対応 | MDX サポート |
+|:---:|:---:|
+| ![画像フォーマット対応](screenshots/screenshoot-1.png) | ![MDX サポート](screenshots/screenshoot-2.png) |
+| **Marp プレゼンテーション** | **ASCII Mermaid** |
+| ![Marp プレゼンテーション](screenshots/screenshoot-3.png) | ![ASCII Mermaid](screenshots/screenshoot-4.png) |
 
 ## なぜこの拡張機能なのか
 

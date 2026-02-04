@@ -107,6 +107,16 @@ export class MarkdownEngine {
     // (Mermaid blocks are handled by the custom fence renderer in MarkdownParser)
     let html = this.parser.render(processedContent, { lineOffset });
 
+    // Resolve relative image paths to data URIs for webview compatibility
+    if (options?.sourceUri) {
+      try {
+        const sourcePath = vscode.Uri.parse(options.sourceUri).fsPath;
+        html = this.resolveImagePaths(html, path.dirname(sourcePath));
+      } catch (error) {
+        console.warn('Failed to resolve image paths:', error);
+      }
+    }
+
     // Process math expressions
     html = this.katexRenderer.processMathInContent(html);
 
@@ -2535,6 +2545,63 @@ body.vscode-high-contrast .ctx-sep {
   /**
    * Escape HTML entities
    */
+  /**
+   * Resolve relative image paths in rendered HTML to data URIs.
+   * Standard markdown ![alt](relative/path.png) renders as <img src="relative/path.png">
+   * which doesn't work in VS Code webview. This converts them to data URIs.
+   */
+  private resolveImagePaths(html: string, fileDirectoryPath: string): string {
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.apng': 'image/apng',
+      '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp',
+      '.webp': 'image/webp',
+    };
+
+    return html.replace(
+      /<img\s([^>]*?)src="([^"]+)"([^>]*?)>/g,
+      (match, before, src, after) => {
+        // Skip absolute URLs, data URIs, and protocol-relative URLs
+        if (/^(https?:\/\/|data:|\/\/)/.test(src)) {
+          return match;
+        }
+
+        const ext = path.extname(src).toLowerCase();
+        if (!MarkdownEngine.IMAGE_EXTENSIONS.has(ext)) {
+          return match;
+        }
+
+        const resolvedPath = path.isAbsolute(src)
+          ? src
+          : path.resolve(fileDirectoryPath, src);
+
+        try {
+          if (!fs.existsSync(resolvedPath)) {
+            return match;
+          }
+
+          const mime = mimeTypes[ext] || 'application/octet-stream';
+          let dataUri: string;
+          if (ext === '.svg') {
+            const svgContent = fs.readFileSync(resolvedPath, 'utf-8');
+            dataUri = `data:image/svg+xml;base64,${Buffer.from(svgContent).toString('base64')}`;
+          } else {
+            const imageBuffer = fs.readFileSync(resolvedPath);
+            dataUri = `data:${mime};base64,${imageBuffer.toString('base64')}`;
+          }
+
+          return `<img ${before}src="${dataUri}"${after}>`;
+        } catch {
+          return match;
+        }
+      },
+    );
+  }
+
   private escapeHtml(text: string): string {
     const htmlEntities: Record<string, string> = {
       '&': '&amp;',
