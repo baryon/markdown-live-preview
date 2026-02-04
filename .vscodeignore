@@ -14,10 +14,9 @@ flake.lock
 flake.nix
 shell.nix
 node_modules
-.eslintignore
-.prettierignore
 build.js
-prettier.config.js
-.eslintrc.js
-.husky
-gulpfile.js
+biome.json
+pnpm-lock.yaml
+.claude/**
+.github/**
+.playwright-mcp/**
