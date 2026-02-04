@@ -2,7 +2,7 @@
 
 # Markdown Live Preview
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview) [VS Marketplace からインストール](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
 
 モダンな VS Code Markdown プレビュー拡張機能 —— ドキュメントがまず生成され、次に読まれる AI 時代のために構築されました。
 

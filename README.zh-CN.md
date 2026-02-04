@@ -2,7 +2,7 @@
 
 # Markdown Live Preview
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview) [从 VS Marketplace 安装](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
 
 一款现代化的 VS Code Markdown 预览扩展 —— 为 AI 时代而生，文档先生成，再阅读。
 

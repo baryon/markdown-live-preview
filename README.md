@@ -2,7 +2,7 @@
 
 # Markdown Live Preview
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/baryon.baryon-markdown-live-preview?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview) [Install from VS Marketplace](https://marketplace.visualstudio.com/items?itemName=baryon.baryon-markdown-live-preview)
 
 A modern VS Code extension for previewing Markdown — built for the AI era, where documents are generated first and read second.
 
