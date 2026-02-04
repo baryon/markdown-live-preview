@@ -574,8 +574,30 @@ export class MarkdownEngine {
 
       // Render based on file extension
       if (MarkdownEngine.IMAGE_EXTENSIONS.has(ext)) {
-        // Image: generate <img> tag with optional attributes
-        const imgAttrs: string[] = [`src="${this.escapeHtml(importPath)}"`];
+        // Image: embed as data URI so it works in VS Code webview
+        // (relative paths don't resolve correctly in webview context)
+        const mimeTypes: Record<string, string> = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.apng': 'image/apng',
+          '.svg': 'image/svg+xml',
+          '.bmp': 'image/bmp',
+          '.webp': 'image/webp',
+        };
+        const mime = mimeTypes[ext] || 'application/octet-stream';
+        let src: string;
+        if (ext === '.svg') {
+          // SVG: use text content as data URI
+          const svgContent = fs.readFileSync(resolvedPath, 'utf-8');
+          src = `data:image/svg+xml;base64,${Buffer.from(svgContent).toString('base64')}`;
+        } else {
+          // Binary image: read as base64
+          const imageBuffer = fs.readFileSync(resolvedPath);
+          src = `data:${mime};base64,${imageBuffer.toString('base64')}`;
+        }
+        const imgAttrs: string[] = [`src="${src}"`];
         for (const key of ['width', 'height', 'title', 'alt']) {
           if (attrs[key]) {
             imgAttrs.push(`${key}="${this.escapeHtml(attrs[key])}"`);

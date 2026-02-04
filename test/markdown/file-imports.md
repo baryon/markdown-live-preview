@@ -1,7 +1,7 @@
 # [File imports](https://shd101wyy.github.io/markdown-preview-enhanced/#/file-imports)
 
-`@import "file-imports/markdown-logo.jpg"`
-@import "file-imports/markdown-logo.jpg"
+`@import "file-imports/markdown-logo.svg"`
+@import "file-imports/markdown-logo.svg"
 
 ---
 

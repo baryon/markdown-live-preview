@@ -1,0 +1,153 @@
+# MDX Features Demo
+
+MDX lets you use JSX in your markdown content, combining the readability of Markdown with the power of components.
+
+## Inline Expressions
+
+The current year is {new Date().getFullYear()}. MDX supports JavaScript expressions wrapped in curly braces: {1 + 2 + 3}.
+
+## JSX Components
+
+<div style={{padding: '16px', background: '#f0f4ff', borderRadius: '8px', border: '1px solid #c0d0ff'}}>
+  <h3 style={{margin: 0, color: '#1a3a8a'}}>Info Box</h3>
+  <p>This is a styled JSX block rendered directly in MDX.</p>
+</div>
+
+<details>
+  <summary>Click to expand</summary>
+
+  This is hidden content inside a native HTML `<details>` element.
+
+  - Works with Markdown inside
+  - **Bold** and *italic* too
+  - Even `inline code`
+</details>
+
+## Export / Variables
+
+export const version = '0.9.0'
+export const features = ['Mermaid', 'KaTeX', 'Marp', 'Shiki', 'Code Chunks']
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Feature</th></tr>
+  </thead>
+  <tbody>
+    {features.map((f, i) => (
+      <tr key={i}><td>{i + 1}</td><td>{f}</td></tr>
+    ))}
+  </tbody>
+</table>
+
+## Mixing Markdown and JSX
+
+Regular markdown works alongside JSX:
+
+| Syntax    | Support |
+|-----------|---------|
+| **Bold**  | Yes     |
+| *Italic*  | Yes     |
+| `Code`    | Yes     |
+| ~~Strike~~| Yes     |
+
+<div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '16px 0'}}>
+  <div style={{padding: '12px', background: '#e8f5e9', borderRadius: '6px'}}>
+    <strong>Card A</strong>
+    <p>Grid layout with JSX.</p>
+  </div>
+  <div style={{padding: '12px', background: '#fff3e0', borderRadius: '6px'}}>
+    <strong>Card B</strong>
+    <p>Side by side cards.</p>
+  </div>
+</div>
+
+## Math in MDX
+
+MDX files can still use KaTeX math:
+
+Inline: $E = mc^2$
+
+Block:
+
+$$
+\sum_{k=1}^{n} k = \frac{n(n+1)}{2}
+$$
+
+## Code Blocks
+
+```jsx
+function Greeting({ name }) {
+  return <h1>Hello, {name}!</h1>;
+}
+
+export default function App() {
+  return (
+    <div>
+      <Greeting name="MDX" />
+      <p>Components in markdown.</p>
+    </div>
+  );
+}
+```
+
+```typescript
+interface MDXProps {
+  components?: Record<string, React.ComponentType>;
+  children?: React.ReactNode;
+}
+
+const MDXProvider: React.FC<MDXProps> = ({ components, children }) => {
+  return <MDXContext.Provider value={components}>{children}</MDXContext.Provider>;
+};
+```
+
+## Diagrams
+
+Mermaid diagrams work in MDX too:
+
+```mermaid
+graph TD
+    MDX[MDX File] --> Markdown[Markdown Content]
+    MDX --> JSX[JSX Components]
+    MDX --> Expressions[JS Expressions]
+    Markdown --> HTML[HTML Output]
+    JSX --> HTML
+    Expressions --> HTML
+```
+
+## Custom HTML Elements
+
+<figure style={{textAlign: 'center', margin: '24px 0'}}>
+  <blockquote style={{fontSize: '1.2em', fontStyle: 'italic', color: '#555', borderLeft: '4px solid #3b82f6', paddingLeft: '16px', margin: 0}}>
+    MDX is markdown for the component era.
+  </blockquote>
+  <figcaption style={{marginTop: '8px', color: '#888'}}>— MDX Documentation</figcaption>
+</figure>
+
+## Conditional Rendering
+
+export const showAdvanced = true
+
+{showAdvanced && (
+  <div style={{padding: '12px', background: '#fce4ec', borderRadius: '6px', border: '1px solid #f48fb1'}}>
+    <strong>Advanced Section</strong>
+    <p>This block is conditionally rendered based on the <code>showAdvanced</code> variable.</p>
+  </div>
+)}
+
+## Task List
+
+- [x] Markdown basics
+- [x] JSX components
+- [x] JavaScript expressions
+- [x] Math rendering
+- [x] Mermaid diagrams
+- [ ] Custom component library
+- [ ] MDX plugins
+
+## Footnotes
+
+MDX supports standard markdown footnotes[^1] and other extensions[^2].
+
+[^1]: Footnotes work the same as in regular markdown.
+[^2]: Including emoji :rocket: and wiki links [[Home]].
