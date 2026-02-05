@@ -360,6 +360,7 @@ function generateLineNumberedCodeBlock(
   content: string,
   language: string,
   dataLine?: string,
+  includeContainer = true,
 ): string {
   const lines = content.split('\n');
   // Remove trailing empty line that fenced code blocks often have
@@ -378,7 +379,21 @@ function generateLineNumberedCodeBlock(
         )}</span></span>`,
     )
     .join('');
-  return `<pre class="code-block-with-line-numbers${langClass}"${dlAttr}><code>${lineHtml}</code></pre>\n`;
+  const preBlock = `<pre class="code-block-with-line-numbers${langClass}"${dlAttr}><code>${lineHtml}</code></pre>`;
+
+  if (!includeContainer) {
+    return `${preBlock}\n`;
+  }
+
+  // Wrap in container with hover controls (Copy button)
+  return (
+    `<div class="code-block-container"${dlAttr}>` +
+    `<div class="code-block-controls">` +
+    `<button class="code-copy-btn" title="Copy code">Copy</button>` +
+    `</div>` +
+    preBlock +
+    `</div>\n`
+  );
 }
 
 /**
@@ -434,24 +449,28 @@ function installDiagramFenceRenderer(
 
       let sourceHtml = '';
       if (!hideSource) {
+        // Don't wrap in container since code-chunk already has controls
         sourceHtml = generateLineNumberedCodeBlock(
           content,
           language,
           dataLine ?? undefined,
+          false, // don't include container
         );
       }
 
-      // Only show run controls when script execution is enabled
-      const controlsHtml = enableScriptExecution
-        ? `<div class="code-chunk-controls">` +
+      // Build controls HTML - always include Copy button, conditionally include Run
+      let controlsHtml = `<div class="code-chunk-controls">`;
+      if (enableScriptExecution) {
+        controlsHtml +=
           `<button class="code-chunk-run-btn" data-chunk-id="${escapeHtmlForFence(
             chunkId,
           )}">&#9654; Run</button>` +
           `<span class="code-chunk-status" data-chunk-id="${escapeHtmlForFence(
             chunkId,
-          )}"></span>` +
-          `</div>`
-        : '';
+          )}"></span>`;
+      }
+      controlsHtml += `<button class="code-copy-btn" title="Copy code">Copy</button>`;
+      controlsHtml += `</div>`;
 
       return (
         `<div class="code-chunk" data-chunk-id="${escapeHtmlForFence(
@@ -493,29 +512,85 @@ function installDiagramFenceRenderer(
 
     const diagramClass = DIAGRAM_LANGUAGES[language];
     if (diagramClass) {
+      // Build diagram controls HTML
+      const buildDiagramControls = (isMermaid: boolean): string => {
+        let controls = `<div class="diagram-controls">`;
+        controls += `<button class="diagram-copy-source-btn" title="Copy source code">Code</button>`;
+        controls += `<button class="diagram-copy-svg-btn" title="Copy as SVG">SVG</button>`;
+        controls += `<button class="diagram-copy-png-btn" title="Copy as PNG">PNG</button>`;
+        if (isMermaid) {
+          controls += `<select class="diagram-theme-select" title="Mermaid theme">`;
+          controls += `<optgroup label="Light">`;
+          controls += `<option value="github-light">GitHub Light</option>`;
+          controls += `<option value="solarized-light">Solarized Light</option>`;
+          controls += `<option value="catppuccin-latte">Catppuccin Latte</option>`;
+          controls += `<option value="nord-light">Nord Light</option>`;
+          controls += `<option value="tokyo-night-light">Tokyo Night Light</option>`;
+          controls += `<option value="zinc-light">Zinc Light</option>`;
+          controls += `</optgroup>`;
+          controls += `<optgroup label="Dark">`;
+          controls += `<option value="github-dark">GitHub Dark</option>`;
+          controls += `<option value="solarized-dark">Solarized Dark</option>`;
+          controls += `<option value="catppuccin-mocha">Catppuccin Mocha</option>`;
+          controls += `<option value="nord">Nord</option>`;
+          controls += `<option value="tokyo-night">Tokyo Night</option>`;
+          controls += `<option value="tokyo-night-storm">Tokyo Night Storm</option>`;
+          controls += `<option value="zinc-dark">Zinc Dark</option>`;
+          controls += `<option value="one-dark">One Dark</option>`;
+          controls += `<option value="dracula">Dracula</option>`;
+          controls += `</optgroup>`;
+          controls += `</select>`;
+          controls += `<button class="diagram-ascii-btn" title="Toggle ASCII mode">ASCII</button>`;
+        }
+        controls += `</div>`;
+        return controls;
+      };
+
       // Mermaid: raw content inside div (mermaid.js parses it)
       if (diagramClass === 'mermaid') {
-        return `<div class="mermaid"${dlAttr}>\n${content}</div>\n`;
+        const controls = buildDiagramControls(true);
+        return (
+          `<div class="diagram-container mermaid-container"${dlAttr}>` +
+          controls +
+          `<div class="mermaid" data-source="${escapeHtmlForFence(content)}">\n${content}</div>` +
+          `</div>\n`
+        );
       }
 
       // WaveDrom: content is JSON, stored in a <script> tag for WaveDrom
       if (diagramClass === 'wavedrom') {
         const id = `wavedrom-${idx}`;
-        return `<div class="wavedrom" id="${id}"${dlAttr}><script type="WaveDrom">${content}</script></div>\n`;
+        const controls = buildDiagramControls(false);
+        return (
+          `<div class="diagram-container wavedrom-container"${dlAttr}>` +
+          controls +
+          `<div class="wavedrom" id="${id}" data-source="${escapeHtmlForFence(content)}"><script type="WaveDrom">${content}</script></div>` +
+          `</div>\n`
+        );
       }
 
       // GraphViz (viz / dot): store source in a div, with optional engine attribute
       if (diagramClass === 'graphviz') {
         const engine = attrs.engine || 'dot';
-        return `<div class="graphviz" data-engine="${escapeHtmlForFence(
-          engine,
-        )}"${dlAttr}>${escapeHtmlForFence(content)}</div>\n`;
+        const controls = buildDiagramControls(false);
+        return (
+          `<div class="diagram-container graphviz-container"${dlAttr}>` +
+          controls +
+          `<div class="graphviz" data-engine="${escapeHtmlForFence(engine)}" data-source="${escapeHtmlForFence(content)}">${escapeHtmlForFence(content)}</div>` +
+          `</div>\n`
+        );
       }
 
       // Vega / Vega-Lite: store spec in a <script> tag inside a container
       if (diagramClass === 'vega' || diagramClass === 'vega-lite') {
         const id = `${diagramClass}-${idx}`;
-        return `<div class="${diagramClass}" id="${id}"${dlAttr}><script type="application/json">${content}</script></div>\n`;
+        const controls = buildDiagramControls(false);
+        return (
+          `<div class="diagram-container ${diagramClass}-container"${dlAttr}>` +
+          controls +
+          `<div class="${diagramClass}" id="${id}" data-source="${escapeHtmlForFence(content)}"><script type="application/json">${content}</script></div>` +
+          `</div>\n`
+        );
       }
     }
 

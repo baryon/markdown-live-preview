@@ -193,6 +193,31 @@ print(f"Pi = {math.pi:.10f}")
 
 Color scheme can follow the selected theme, the system setting, or the editor's light/dark mode.
 
+### Quick Actions (Hover Panels)
+
+Hover over code blocks or diagrams to reveal quick action buttons:
+
+#### Code Blocks
+- **Copy** — Copy code to clipboard (line numbers excluded)
+
+#### Diagrams (Mermaid, GraphViz, Vega, WaveDrom)
+- **Code** — Copy diagram source code
+- **SVG** — Copy as SVG to clipboard
+- **PNG** — Copy as PNG image to clipboard
+
+#### Mermaid Diagrams (Additional)
+- **Theme Selector** — Switch between 15 Mermaid themes on the fly
+- **ASCII Toggle** — Switch between SVG and ASCII rendering mode
+
+### Copy for Lark (飞书)
+
+Right-click in the preview and select **"Copy for Lark (飞书)"** to copy content optimized for pasting into Lark/Feishu documents:
+
+- Code blocks converted to clean formatted text
+- Diagrams converted to PNG images for better compatibility
+- Tables, blockquotes, and task lists properly styled
+- All formatting preserved for seamless paste
+
 ### Additional Features
 
 - **Wiki Links** — `[[page]]` and `[[page|display text]]` syntax with configurable case transformation

@@ -255,6 +255,10 @@ export class MarkdownEngine {
             if (window.renderAllDiagrams) {
               window.renderAllDiagrams();
             }
+            // Initialize diagram hover controls for new content
+            if (window._initDiagramControls) {
+              window._initDiagramControls();
+            }
             break;
           case 'changeTextEditorSelection':
             // Scroll sync handling
@@ -422,6 +426,178 @@ export class MarkdownEngine {
           }
         }
       });
+
+      // ===== Hover control panel handlers =====
+
+      // Toast notification helper
+      function showToast(msg) {
+        var toast = document.getElementById('ctx-toast');
+        if (!toast) return;
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(function() { toast.classList.remove('show'); }, 1500);
+      }
+
+      // Extract code text from a pre element (skip line numbers)
+      function extractCodeTextFromPre(preEl) {
+        var codeEl = preEl.querySelector('code');
+        if (!codeEl) return preEl.textContent;
+        var lines = codeEl.querySelectorAll('.line, .code-line');
+        if (lines.length > 0) {
+          return Array.from(lines).map(function(line) {
+            var content = line.querySelector('.line-content');
+            if (content) return content.textContent;
+            var clone = line.cloneNode(true);
+            var ln = clone.querySelector('.line-number');
+            if (ln) ln.remove();
+            return clone.textContent;
+          }).join('\\n');
+        }
+        return codeEl.textContent;
+      }
+
+      // SVG to PNG conversion helper
+      function svgToPngBlob(svgEl, callback) {
+        var svgStr = new XMLSerializer().serializeToString(svgEl);
+        var canvas = document.createElement('canvas');
+        var img = new Image();
+        img.onload = function() {
+          canvas.width = img.naturalWidth * 2;
+          canvas.height = img.naturalHeight * 2;
+          var c = canvas.getContext('2d');
+          c.scale(2, 2);
+          c.drawImage(img, 0, 0);
+          canvas.toBlob(function(blob) { callback(blob); }, 'image/png');
+        };
+        img.onerror = function() { callback(null); };
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+      }
+
+      // Handle hover control button clicks
+      document.addEventListener('click', function(e) {
+        var target = e.target;
+
+        // Copy code from code block container
+        if (target.matches('.code-block-container .code-copy-btn')) {
+          var container = target.closest('.code-block-container');
+          var pre = container.querySelector('pre');
+          if (pre) {
+            var text = extractCodeTextFromPre(pre);
+            navigator.clipboard.writeText(text).then(function() {
+              showToast('Copied code');
+            });
+          }
+          return;
+        }
+
+        // Copy code from code chunk
+        if (target.matches('.code-chunk .code-copy-btn')) {
+          var chunk = target.closest('.code-chunk');
+          var pre = chunk.querySelector('.code-chunk-source pre');
+          if (pre) {
+            var text = extractCodeTextFromPre(pre);
+            navigator.clipboard.writeText(text).then(function() {
+              showToast('Copied code');
+            });
+          }
+          return;
+        }
+
+        // Copy diagram source
+        if (target.matches('.diagram-copy-source-btn')) {
+          var container = target.closest('.diagram-container');
+          var diagram = container.querySelector('.mermaid, .graphviz, .wavedrom, .vega, .vega-lite');
+          if (diagram) {
+            var source = diagram.getAttribute('data-source') || diagram.textContent;
+            navigator.clipboard.writeText(source).then(function() {
+              showToast('Copied diagram source');
+            });
+          }
+          return;
+        }
+
+        // Copy SVG
+        if (target.matches('.diagram-copy-svg-btn')) {
+          var container = target.closest('.diagram-container');
+          var svg = container.querySelector('svg');
+          if (svg) {
+            var svgStr = new XMLSerializer().serializeToString(svg);
+            navigator.clipboard.write([new ClipboardItem({
+              'text/plain': new Blob([svgStr], { type: 'text/plain' })
+            })]).then(function() { showToast('Copied SVG'); });
+          } else {
+            showToast('No SVG found');
+          }
+          return;
+        }
+
+        // Copy PNG
+        if (target.matches('.diagram-copy-png-btn')) {
+          var container = target.closest('.diagram-container');
+          var svg = container.querySelector('svg');
+          if (svg) {
+            svgToPngBlob(svg, function(blob) {
+              if (blob) {
+                navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                  .then(function() { showToast('Copied PNG'); });
+              } else {
+                showToast('Failed to create PNG');
+              }
+            });
+          } else {
+            showToast('No SVG found');
+          }
+          return;
+        }
+
+        // ASCII toggle (Mermaid only)
+        if (target.matches('.diagram-ascii-btn')) {
+          window._mermaidAsciiMode = !window._mermaidAsciiMode;
+          // Update all ASCII buttons to reflect state
+          document.querySelectorAll('.diagram-ascii-btn').forEach(function(btn) {
+            btn.classList.toggle('active', window._mermaidAsciiMode);
+          });
+          if (window.rerenderDiagramsForTheme) {
+            window.rerenderDiagramsForTheme();
+          }
+          if (vscode) {
+            vscode.postMessage({ command: 'setMermaidAsciiMode', args: [window._mermaidAsciiMode] });
+          }
+          return;
+        }
+      });
+
+      // Handle diagram theme select changes
+      document.addEventListener('change', function(e) {
+        if (e.target.matches('.diagram-theme-select')) {
+          var newTheme = e.target.value;
+          window._mermaidThemeKey = newTheme;
+          // Sync all theme selects
+          document.querySelectorAll('.diagram-theme-select').forEach(function(sel) {
+            sel.value = newTheme;
+          });
+          if (window.rerenderDiagramsForTheme) {
+            window.rerenderDiagramsForTheme();
+          }
+          if (vscode) {
+            vscode.postMessage({ command: 'setMermaidTheme', args: [newTheme] });
+          }
+        }
+      });
+
+      // Initialize theme selects and ASCII buttons on load
+      function initDiagramControls() {
+        var currentTheme = window._mermaidThemeKey || 'github-light';
+        document.querySelectorAll('.diagram-theme-select').forEach(function(sel) {
+          sel.value = currentTheme;
+        });
+        document.querySelectorAll('.diagram-ascii-btn').forEach(function(btn) {
+          btn.classList.toggle('active', window._mermaidAsciiMode);
+        });
+      }
+      // Run on load and after content updates
+      initDiagramControls();
+      window._initDiagramControls = initDiagramControls;
     })();
   </script>
   <script>
@@ -1432,6 +1608,106 @@ export class MarkdownEngine {
       .code-chunk-output-markdown {
         padding: 0.5em 1em;
       }
+
+      /* ===== Code block hover controls ===== */
+      .code-block-container {
+        position: relative;
+        margin: 1em 0;
+      }
+      .code-block-container pre {
+        margin: 0;
+      }
+      .code-block-controls {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+        display: flex;
+        gap: 4px;
+      }
+      .code-block-container:hover .code-block-controls {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* ===== Diagram hover controls ===== */
+      .diagram-container {
+        position: relative;
+        margin: 1em 0;
+      }
+      .diagram-controls {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        pointer-events: none;
+        display: flex;
+        gap: 4px;
+        background: var(--bg);
+        padding: 4px 6px;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px var(--shadow);
+        border: 1px solid var(--border);
+      }
+      .diagram-container:hover .diagram-controls {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* ===== Shared control button styles ===== */
+      .code-copy-btn,
+      .diagram-copy-source-btn,
+      .diagram-copy-svg-btn,
+      .diagram-copy-png-btn,
+      .diagram-ascii-btn {
+        padding: 2px 8px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg);
+        color: var(--fg);
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.1s;
+      }
+      .code-copy-btn:hover,
+      .diagram-copy-source-btn:hover,
+      .diagram-copy-svg-btn:hover,
+      .diagram-copy-png-btn:hover,
+      .diagram-ascii-btn:hover {
+        background: var(--bg-secondary);
+      }
+      .code-copy-btn:active,
+      .diagram-copy-source-btn:active,
+      .diagram-copy-svg-btn:active,
+      .diagram-copy-png-btn:active,
+      .diagram-ascii-btn:active {
+        background: var(--bg-tertiary);
+      }
+      .diagram-ascii-btn.active {
+        background: var(--link);
+        color: #fff;
+        border-color: var(--link);
+      }
+      .diagram-theme-select {
+        padding: 2px 4px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg);
+        color: var(--fg);
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .diagram-theme-select:focus {
+        outline: 1px solid var(--link);
+        outline-offset: 1px;
+      }
     `;
   }
 
@@ -1789,6 +2065,7 @@ setTimeout(function() {
     <div class="ctx-item" data-action="side-by-side">Side by Side</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item" data-action="copy-page">Copy Page</div>
+    <div class="ctx-item" data-action="copy-for-lark">Copy for Lark (飞书)</div>
     <div class="ctx-item" data-action="save-html">Save as HTML</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item ctx-has-sub" data-action="theme-switch">Theme &#9656;
@@ -2340,6 +2617,10 @@ body.vscode-high-contrast .ctx-sep {
         }
         break;
 
+      case 'copy-for-lark':
+        copyForLark();
+        break;
+
       case 'save-html':
         if (vscode) {
           vscode.postMessage({
@@ -2395,6 +2676,186 @@ body.vscode-high-contrast .ctx-sep {
   }
 
   // --- Helpers ---
+
+  // Copy content optimized for Lark/Feishu paste
+  async function copyForLark() {
+    var content = document.getElementById('preview-content');
+    if (!content) return;
+
+    // Clone content for processing
+    var clone = content.cloneNode(true);
+
+    // 1. Remove hover control panels
+    clone.querySelectorAll('.code-block-controls, .diagram-controls, .code-chunk-controls').forEach(function(el) {
+      el.remove();
+    });
+
+    // 2. Convert diagrams (SVG) to PNG images for better Lark compatibility
+    var diagramContainers = clone.querySelectorAll('.diagram-container');
+    var conversionPromises = [];
+
+    diagramContainers.forEach(function(container) {
+      var svg = container.querySelector('svg');
+      if (svg) {
+        var promise = new Promise(function(resolve) {
+          svgToPngDataUrl(svg, function(dataUrl) {
+            if (dataUrl) {
+              // Replace diagram with img
+              var img = document.createElement('img');
+              img.src = dataUrl;
+              img.style.maxWidth = '100%';
+              img.alt = 'diagram';
+              // Keep only the image, remove controls
+              container.innerHTML = '';
+              container.appendChild(img);
+            }
+            resolve();
+          });
+        });
+        conversionPromises.push(promise);
+      }
+    });
+
+    // 3. Process code blocks - convert to simple pre with proper formatting
+    clone.querySelectorAll('.code-block-container').forEach(function(container) {
+      var pre = container.querySelector('pre');
+      if (pre) {
+        // Extract plain text code
+        var codeText = extractCodeText(pre);
+        // Create a simple pre element that Lark handles well
+        var newPre = document.createElement('pre');
+        newPre.style.cssText = 'background:#f5f5f5;padding:12px;border-radius:4px;font-family:monospace;font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;';
+        newPre.textContent = codeText;
+        container.parentNode.replaceChild(newPre, container);
+      }
+    });
+
+    // 4. Process code chunks similarly
+    clone.querySelectorAll('.code-chunk').forEach(function(chunk) {
+      var pre = chunk.querySelector('.code-chunk-source pre');
+      if (pre) {
+        var codeText = extractCodeText(pre);
+        var newPre = document.createElement('pre');
+        newPre.style.cssText = 'background:#f5f5f5;padding:12px;border-radius:4px;font-family:monospace;font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;';
+        newPre.textContent = codeText;
+
+        // Also include output if any
+        var output = chunk.querySelector('.code-chunk-output');
+        var wrapper = document.createElement('div');
+        wrapper.appendChild(newPre);
+        if (output && output.innerHTML.trim()) {
+          var outputDiv = document.createElement('div');
+          outputDiv.style.cssText = 'background:#fafafa;padding:8px;border:1px solid #eee;margin-top:-1px;border-radius:0 0 4px 4px;';
+          outputDiv.innerHTML = output.innerHTML;
+          wrapper.appendChild(outputDiv);
+        }
+        chunk.parentNode.replaceChild(wrapper, chunk);
+      }
+    });
+
+    // 5. Clean up Shiki code blocks (syntax highlighted)
+    clone.querySelectorAll('pre.shiki').forEach(function(pre) {
+      var codeText = extractCodeText(pre);
+      var newPre = document.createElement('pre');
+      newPre.style.cssText = 'background:#f5f5f5;padding:12px;border-radius:4px;font-family:monospace;font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;';
+      newPre.textContent = codeText;
+      pre.parentNode.replaceChild(newPre, pre);
+    });
+
+    // 6. Process tables - add inline styles for Lark
+    clone.querySelectorAll('table').forEach(function(table) {
+      table.style.cssText = 'border-collapse:collapse;width:100%;margin:1em 0;';
+      table.querySelectorAll('th, td').forEach(function(cell) {
+        cell.style.cssText = 'border:1px solid #ddd;padding:8px;text-align:left;';
+      });
+      table.querySelectorAll('th').forEach(function(th) {
+        th.style.backgroundColor = '#f5f5f5';
+        th.style.fontWeight = 'bold';
+      });
+    });
+
+    // 7. Process blockquotes
+    clone.querySelectorAll('blockquote').forEach(function(bq) {
+      bq.style.cssText = 'border-left:4px solid #ddd;margin:1em 0;padding:0.5em 1em;color:#666;background:#f9f9f9;';
+    });
+
+    // 8. Process images - ensure they have proper styling
+    clone.querySelectorAll('img').forEach(function(img) {
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+    });
+
+    // 9. Process math formulas - keep as-is or convert to image
+    // KaTeX rendered formulas should paste reasonably well
+
+    // 10. Process task lists
+    clone.querySelectorAll('.task-list-item').forEach(function(item) {
+      var checkbox = item.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        var span = document.createElement('span');
+        span.textContent = checkbox.checked ? '☑ ' : '☐ ';
+        checkbox.parentNode.replaceChild(span, checkbox);
+      }
+    });
+
+    // Wait for all SVG→PNG conversions
+    await Promise.all(conversionPromises);
+
+    // Create a temporary container for copying
+    var tempDiv = document.createElement('div');
+    tempDiv.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    tempDiv.innerHTML = clone.innerHTML;
+    document.body.appendChild(tempDiv);
+
+    // Select and copy
+    var range = document.createRange();
+    range.selectNodeContents(tempDiv);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    // Copy as both HTML and plain text for best compatibility
+    try {
+      // Try using clipboard API with multiple formats
+      var htmlContent = tempDiv.innerHTML;
+      var textContent = tempDiv.innerText;
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([htmlContent], { type: 'text/html' }),
+          'text/plain': new Blob([textContent], { type: 'text/plain' })
+        })
+      ]);
+      showToast('已复制，可粘贴到飞书');
+    } catch (err) {
+      // Fallback to execCommand
+      document.execCommand('copy');
+      showToast('已复制，可粘贴到飞书');
+    }
+
+    sel.removeAllRanges();
+    document.body.removeChild(tempDiv);
+  }
+
+  // Convert SVG to PNG data URL
+  function svgToPngDataUrl(svgEl, callback) {
+    var svgStr = new XMLSerializer().serializeToString(svgEl);
+    var canvas = document.createElement('canvas');
+    var img = new Image();
+    img.onload = function() {
+      canvas.width = img.naturalWidth * 2;
+      canvas.height = img.naturalHeight * 2;
+      var c = canvas.getContext('2d');
+      c.fillStyle = '#ffffff';
+      c.fillRect(0, 0, canvas.width, canvas.height);
+      c.scale(2, 2);
+      c.drawImage(img, 0, 0);
+      callback(canvas.toDataURL('image/png'));
+    };
+    img.onerror = function() { callback(null); };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+  }
+
   function svgToPngBlob(svgEl, callback) {
     var svgStr = new XMLSerializer().serializeToString(svgEl);
     var canvas = document.createElement('canvas');
