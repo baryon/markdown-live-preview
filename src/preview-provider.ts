@@ -350,6 +350,35 @@ export class PreviewProvider {
               return;
             }
 
+            // Handle fetchUrl — fetch URL content via extension host (bypasses webview CORS)
+            if (message.command === 'fetchUrl') {
+              const [requestId, url] = (message.args || []) as [string, string];
+              if (requestId && url) {
+                fetch(url)
+                  .then((response) => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.text();
+                  })
+                  .then((content) => {
+                    previewPanel.webview.postMessage({
+                      command: 'fetchUrlResponse',
+                      requestId,
+                      success: true,
+                      content,
+                    });
+                  })
+                  .catch((err) => {
+                    previewPanel.webview.postMessage({
+                      command: 'fetchUrlResponse',
+                      requestId,
+                      success: false,
+                      error: String(err),
+                    });
+                  });
+              }
+              return;
+            }
+
             // Handle runCodeChunk from webview run button
             if (message.command === 'runCodeChunk') {
               const [chunkUri, chunkId] = (message.args || []) as [

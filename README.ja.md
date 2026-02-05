@@ -15,6 +15,8 @@
 | ![画像フォーマット対応](screenshots/screenshoot-1.png) | ![MDX サポート](screenshots/screenshoot-2.png) |
 | **Marp プレゼンテーション** | **ASCII Mermaid** |
 | ![Marp プレゼンテーション](screenshots/screenshoot-3.png) | ![ASCII Mermaid](screenshots/screenshoot-4.png) |
+| **Recharts チャート** | |
+| ![Recharts チャート](screenshots/screenshoot-5.png) | |
 
 ## なぜこの拡張機能なのか
 
@@ -64,6 +66,26 @@ Bob --> Alice: Hi
 ````
 
 対応言語：PlantUML、GraphViz/DOT、D2、Ditaa、BlockDiag、Mermaid、Nomnoml、Pikchr、Excalidraw、SVGBob、Structurizr、ERD、DBML、TikZ、WireViz など。
+
+#### Recharts —— React チャートライブラリ
+
+[Recharts](https://recharts.org) v3 を使用して、JSX ライクな構文でインタラクティブなチャートをレンダリング：
+
+````markdown
+```recharts
+<LineChart width={500} height={300} data={[
+  { name: 'Jan', value: 400 },
+  { name: 'Feb', value: 300 },
+  { name: 'Mar', value: 600 }
+]}>
+  <XAxis dataKey="name" />
+  <YAxis />
+  <Line type="monotone" dataKey="value" stroke="#8884d8" />
+</LineChart>
+```
+````
+
+サポートされるチャートタイプ：`LineChart`、`BarChart`、`AreaChart`、`PieChart`、`ComposedChart`、`ScatterChart`、`RadarChart`。`XAxis`、`YAxis`、`CartesianGrid`、`Tooltip`、`Legend` などの一般的なコンポーネントもすべてサポート。
 
 #### その他の組み込みサポート
 

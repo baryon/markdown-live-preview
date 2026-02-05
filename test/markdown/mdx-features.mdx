@@ -101,6 +101,84 @@ const MDXProvider: React.FC<MDXProps> = ({ components, children }) => {
 };
 ```
 
+## Recharts
+
+MDX supports Recharts for data visualization:
+
+```recharts
+<LineChart width={500} height={300} data={[
+  { name: 'Jan', sales: 400, profit: 240 },
+  { name: 'Feb', sales: 300, profit: 139 },
+  { name: 'Mar', sales: 200, profit: 980 },
+  { name: 'Apr', sales: 278, profit: 390 },
+  { name: 'May', sales: 189, profit: 480 },
+  { name: 'Jun', sales: 239, profit: 380 }
+]}>
+  <CartesianGrid strokeDasharray="3 3" />
+  <XAxis dataKey="name" />
+  <YAxis />
+  <Tooltip />
+  <Legend />
+  <Line type="monotone" dataKey="sales" stroke="#8884d8" />
+  <Line type="monotone" dataKey="profit" stroke="#82ca9d" />
+</LineChart>
+```
+
+```recharts
+<BarChart width={500} height={300} data={[
+  { name: 'React', value: 85 },
+  { name: 'Vue', value: 75 },
+  { name: 'Angular', value: 60 },
+  { name: 'Svelte', value: 45 },
+  { name: 'Solid', value: 30 }
+]}>
+  <CartesianGrid strokeDasharray="3 3" />
+  <XAxis dataKey="name" />
+  <YAxis />
+  <Tooltip />
+  <Bar dataKey="value" fill="#8884d8" />
+</BarChart>
+```
+
+```recharts
+<PieChart width={400} height={300}>
+  <Pie
+    data={[
+      { name: 'Desktop', value: 400 },
+      { name: 'Mobile', value: 300 },
+      { name: 'Tablet', value: 200 },
+      { name: 'Other', value: 100 }
+    ]}
+    cx="50%"
+    cy="50%"
+    outerRadius={100}
+    fill="#8884d8"
+    dataKey="value"
+    label
+  />
+  <Tooltip />
+  <Legend />
+</PieChart>
+```
+
+```recharts
+<AreaChart width={500} height={300} data={[
+  { month: 'Jan', uv: 4000, pv: 2400 },
+  { month: 'Feb', uv: 3000, pv: 1398 },
+  { month: 'Mar', uv: 2000, pv: 9800 },
+  { month: 'Apr', uv: 2780, pv: 3908 },
+  { month: 'May', uv: 1890, pv: 4800 },
+  { month: 'Jun', uv: 2390, pv: 3800 }
+]}>
+  <CartesianGrid strokeDasharray="3 3" />
+  <XAxis dataKey="month" />
+  <YAxis />
+  <Tooltip />
+  <Area type="monotone" dataKey="uv" stackId="1" stroke="#8884d8" fill="#8884d8" />
+  <Area type="monotone" dataKey="pv" stackId="1" stroke="#82ca9d" fill="#82ca9d" />
+</AreaChart>
+```
+
 ## Diagrams
 
 Mermaid diagrams work in MDX too:

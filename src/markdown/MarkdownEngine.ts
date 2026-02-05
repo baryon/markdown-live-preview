@@ -195,7 +195,7 @@ export class MarkdownEngine {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:;">
   <title>Markdown Preview</title>
   <link rel="stylesheet" href="${KatexRenderer.getCssUrl()}">
   <style>
@@ -473,6 +473,52 @@ export class MarkdownEngine {
         img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
       }
 
+      // Convert img element to PNG blob (for Kroki diagrams)
+      function imgToPngBlob(imgEl, callback) {
+        var canvas = document.createElement('canvas');
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+          canvas.width = img.naturalWidth * 2;
+          canvas.height = img.naturalHeight * 2;
+          var c = canvas.getContext('2d');
+          c.scale(2, 2);
+          c.drawImage(img, 0, 0);
+          canvas.toBlob(function(blob) { callback(blob); }, 'image/png');
+        };
+        img.onerror = function() { callback(null); };
+        img.src = imgEl.src;
+      }
+
+      // Fetch URL via extension host (bypasses webview CORS restrictions)
+      var _fetchCallbacks = {};
+      var _fetchIdCounter = 0;
+
+      function fetchViaExtension(url, callback) {
+        if (!vscode) {
+          callback(null, 'VSCode API not available');
+          return;
+        }
+        var requestId = 'fetch_' + (++_fetchIdCounter);
+        _fetchCallbacks[requestId] = callback;
+        vscode.postMessage({ command: 'fetchUrl', args: [requestId, url] });
+      }
+
+      // Handle fetch response from extension host
+      window.addEventListener('message', function(ev) {
+        if (ev.data && ev.data.command === 'fetchUrlResponse') {
+          var cb = _fetchCallbacks[ev.data.requestId];
+          if (cb) {
+            delete _fetchCallbacks[ev.data.requestId];
+            if (ev.data.success) {
+              cb(ev.data.content, null);
+            } else {
+              cb(null, ev.data.error);
+            }
+          }
+        }
+      });
+
       // Handle hover control button clicks
       document.addEventListener('click', function(e) {
         var target = e.target;
@@ -503,10 +549,19 @@ export class MarkdownEngine {
           return;
         }
 
+        // Toggle diagram controls expand/collapse
+        if (target.matches('.diagram-toggle-btn')) {
+          var controls = target.closest('.diagram-controls');
+          if (controls) {
+            controls.classList.toggle('expanded');
+          }
+          return;
+        }
+
         // Copy diagram source
         if (target.matches('.diagram-copy-source-btn')) {
           var container = target.closest('.diagram-container');
-          var diagram = container.querySelector('.mermaid, .graphviz, .wavedrom, .vega, .vega-lite');
+          var diagram = container.querySelector('.mermaid, .graphviz, .wavedrom, .vega, .vega-lite, .recharts, .kroki-diagram');
           if (diagram) {
             var source = diagram.getAttribute('data-source') || diagram.textContent;
             navigator.clipboard.writeText(source).then(function() {
@@ -519,12 +574,27 @@ export class MarkdownEngine {
         // Copy SVG
         if (target.matches('.diagram-copy-svg-btn')) {
           var container = target.closest('.diagram-container');
-          var svg = container.querySelector('svg');
+          var svg = container.querySelector('svg') || container.querySelector('.vega-embed svg');
+          var krokiDiagram = container.querySelector('.kroki-diagram');
+
           if (svg) {
             var svgStr = new XMLSerializer().serializeToString(svg);
             navigator.clipboard.write([new ClipboardItem({
               'text/plain': new Blob([svgStr], { type: 'text/plain' })
             })]).then(function() { showToast('Copied SVG'); });
+          } else if (krokiDiagram && krokiDiagram.getAttribute('data-svg-url')) {
+            // For Kroki, fetch SVG via extension host (bypasses CORS)
+            var svgUrl = krokiDiagram.getAttribute('data-svg-url');
+            fetchViaExtension(svgUrl, function(content, error) {
+              if (content) {
+                navigator.clipboard.write([new ClipboardItem({
+                  'text/plain': new Blob([content], { type: 'text/plain' })
+                })]).then(function() { showToast('Copied SVG'); });
+              } else {
+                console.error('Fetch error:', error);
+                showToast('Failed to fetch SVG');
+              }
+            });
           } else {
             showToast('No SVG found');
           }
@@ -534,7 +604,11 @@ export class MarkdownEngine {
         // Copy PNG
         if (target.matches('.diagram-copy-png-btn')) {
           var container = target.closest('.diagram-container');
-          var svg = container.querySelector('svg');
+          // Look for SVG (including inside vega-embed container)
+          var svg = container.querySelector('svg') || container.querySelector('.vega-embed svg');
+          var img = container.querySelector('img');
+          var diagramEl = container.querySelector('.mermaid, .graphviz, .wavedrom, .vega, .vega-lite, .recharts, .kroki-diagram');
+
           if (svg) {
             svgToPngBlob(svg, function(blob) {
               if (blob) {
@@ -544,8 +618,54 @@ export class MarkdownEngine {
                 showToast('Failed to create PNG');
               }
             });
+          } else if (container.querySelector('.kroki-diagram')) {
+            // For Kroki diagrams, fetch SVG via extension and convert to PNG
+            var krokiEl = container.querySelector('.kroki-diagram');
+            var svgUrl = krokiEl.getAttribute('data-svg-url');
+            if (svgUrl) {
+              fetchViaExtension(svgUrl, function(svgContent, error) {
+                if (svgContent) {
+                  // Parse SVG and convert to PNG
+                  var tempDiv = document.createElement('div');
+                  tempDiv.innerHTML = svgContent;
+                  var svgEl = tempDiv.querySelector('svg');
+                  if (svgEl) {
+                    svgToPngBlob(svgEl, function(blob) {
+                      if (blob) {
+                        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                          .then(function() { showToast('Copied PNG'); });
+                      } else {
+                        showToast('Failed to create PNG');
+                      }
+                    });
+                  } else {
+                    showToast('Failed to parse SVG');
+                  }
+                } else {
+                  console.error('Fetch error:', error);
+                  showToast('Failed to fetch image');
+                }
+              });
+            } else {
+              showToast('No SVG URL found');
+            }
+          } else if (diagramEl && typeof html2canvas !== 'undefined') {
+            // Fallback: use html2canvas for any diagram
+            html2canvas(diagramEl, { backgroundColor: null, scale: 2 }).then(function(canvas) {
+              canvas.toBlob(function(blob) {
+                if (blob) {
+                  navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                    .then(function() { showToast('Copied PNG'); });
+                } else {
+                  showToast('Failed to create PNG');
+                }
+              }, 'image/png');
+            }).catch(function(err) {
+              console.error('html2canvas error:', err);
+              showToast('Failed to capture diagram');
+            });
           } else {
-            showToast('No SVG found');
+            showToast('No image found');
           }
           return;
         }
@@ -562,6 +682,55 @@ export class MarkdownEngine {
           }
           if (vscode) {
             vscode.postMessage({ command: 'setMermaidAsciiMode', args: [window._mermaidAsciiMode] });
+          }
+          return;
+        }
+
+        // Toggle math controls expand/collapse
+        if (target.matches('.math-toggle-btn')) {
+          var controls = target.closest('.math-controls');
+          if (controls) {
+            controls.classList.toggle('expanded');
+          }
+          return;
+        }
+
+        // Copy math LaTeX source
+        if (target.matches('.math-copy-source-btn')) {
+          var container = target.closest('.math-container');
+          var mathBlock = container.querySelector('.math-block');
+          if (mathBlock) {
+            var source = mathBlock.getAttribute('data-source') || '';
+            // Decode HTML entities
+            var textarea = document.createElement('textarea');
+            textarea.innerHTML = source;
+            source = textarea.value;
+            navigator.clipboard.writeText(source).then(function() {
+              showToast('Copied LaTeX');
+            });
+          }
+          return;
+        }
+
+        // Copy math as PNG
+        if (target.matches('.math-copy-png-btn')) {
+          var container = target.closest('.math-container');
+          var mathBlock = container.querySelector('.math-block');
+          if (mathBlock) {
+            // KaTeX renders to HTML with spans, we need to convert to image
+            html2canvas(mathBlock, { backgroundColor: null, scale: 2 }).then(function(canvas) {
+              canvas.toBlob(function(blob) {
+                if (blob) {
+                  navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                    .then(function() { showToast('Copied PNG'); });
+                } else {
+                  showToast('Failed to create PNG');
+                }
+              }, 'image/png');
+            }).catch(function(err) {
+              console.error('html2canvas error:', err);
+              showToast('Failed to capture math');
+            });
           }
           return;
         }
@@ -598,6 +767,24 @@ export class MarkdownEngine {
       // Run on load and after content updates
       initDiagramControls();
       window._initDiagramControls = initDiagramControls;
+
+      // Collapse diagram/math controls when mouse leaves the container
+      document.addEventListener('mouseleave', function(e) {
+        if (e.target && e.target.matches) {
+          if (e.target.matches('.diagram-container')) {
+            var controls = e.target.querySelector('.diagram-controls');
+            if (controls) {
+              controls.classList.remove('expanded');
+            }
+          }
+          if (e.target.matches('.math-container')) {
+            var mathControls = e.target.querySelector('.math-controls');
+            if (mathControls) {
+              mathControls.classList.remove('expanded');
+            }
+          }
+        }
+      }, true);
     })();
   </script>
   <script>
@@ -1098,7 +1285,7 @@ export class MarkdownEngine {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:;">
   <title>Marp Presentation</title>
   <style>
     ${css}
@@ -1439,11 +1626,27 @@ export class MarkdownEngine {
       }
 
       /* Diagram containers */
-      .mermaid, .wavedrom, .graphviz, .vega, .vega-lite, .kroki-diagram {
+      .mermaid, .wavedrom, .graphviz, .vega, .vega-lite, .kroki-diagram, .recharts {
         text-align: center;
         margin: 1em 0;
       }
       .mermaid svg, .graphviz svg, .wavedrom svg {
+        max-width: 100%;
+        height: auto;
+      }
+      .recharts {
+        display: flex;
+        justify-content: center;
+        min-height: 100px;
+        background: #f9f9f9;
+        border: 1px dashed #ddd;
+        border-radius: 4px;
+      }
+      .recharts[data-rendered="true"] {
+        background: transparent;
+        border: none;
+      }
+      .recharts svg {
         max-width: 100%;
         height: auto;
       }
@@ -1647,6 +1850,7 @@ export class MarkdownEngine {
         transition: opacity 0.15s ease;
         pointer-events: none;
         display: flex;
+        align-items: center;
         gap: 4px;
         background: var(--bg);
         padding: 4px 6px;
@@ -1657,6 +1861,35 @@ export class MarkdownEngine {
       .diagram-container:hover .diagram-controls {
         opacity: 1;
         pointer-events: auto;
+      }
+      /* Toggle button - always visible when controls are visible */
+      .diagram-toggle-btn {
+        padding: 2px 6px;
+        font-size: 14px;
+        line-height: 1;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: var(--fg-muted);
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.1s, color 0.1s;
+      }
+      .diagram-toggle-btn:hover {
+        background: var(--bg-secondary);
+        color: var(--fg);
+      }
+      .diagram-controls.expanded .diagram-toggle-btn {
+        display: none;
+      }
+      /* Expanded buttons container - hidden by default */
+      .diagram-controls-expanded {
+        display: none;
+        gap: 4px;
+        align-items: center;
+      }
+      .diagram-controls.expanded .diagram-controls-expanded {
+        display: flex;
       }
 
       /* ===== Shared control button styles ===== */
@@ -1738,6 +1971,16 @@ export class MarkdownEngine {
 <script src="https://${jsdelivr}/npm/vega@5/build/vega.min.js"></script>
 <script src="https://${jsdelivr}/npm/vega-lite@5/build/vega-lite.min.js"></script>
 <script src="https://${jsdelivr}/npm/vega-embed@6/build/vega-embed.min.js"></script>
+
+<!-- React, ReactDOM, react-is for Recharts v3 -->
+<script src="https://${jsdelivr}/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://${jsdelivr}/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://${jsdelivr}/npm/react-is@18/umd/react-is.production.min.js"></script>
+<!-- Recharts v3 -->
+<script src="https://${jsdelivr}/npm/recharts@3/umd/Recharts.js"></script>
+
+<!-- html2canvas for math/element to PNG -->
+<script src="https://${jsdelivr}/npm/html2canvas@1/dist/html2canvas.min.js"></script>
 
 <!-- Beautiful Mermaid (primary) -->
 <script src="https://${jsdelivr}/npm/beautiful-mermaid/dist/beautiful-mermaid.browser.global.js"></script>
@@ -1975,6 +2218,281 @@ window.renderVega = function() {
   });
 };
 
+// --- Recharts rendering ---
+window.renderRecharts = function() {
+  var elements = document.querySelectorAll('.recharts:not([data-rendered])');
+  if (elements.length === 0) return;
+
+  // Check dependencies and show errors visually
+  var errors = [];
+  if (typeof React === 'undefined') errors.push('React not loaded');
+  if (typeof ReactDOM === 'undefined') errors.push('ReactDOM not loaded');
+  if (typeof Recharts === 'undefined') errors.push('Recharts not loaded');
+
+  if (errors.length > 0) {
+    elements.forEach(function(el) {
+      el.innerHTML = '<div style="color:#c00;padding:12px;background:#fff0f0;border:1px solid #fcc;border-radius:4px;font-size:12px;">' +
+        '<strong>Recharts Error:</strong><br>' + errors.join('<br>') +
+        '<br><br><em>Scripts may still be loading. Try refreshing.</em></div>';
+      el.setAttribute('data-rendered', 'true');
+    });
+    return;
+  }
+
+  var RC = Recharts;
+
+  document.querySelectorAll('.recharts:not([data-rendered])').forEach(function(el) {
+    try {
+      // Get source from script tag
+      var scriptEl = el.querySelector('script[type="text/recharts"]');
+      var source = scriptEl ? scriptEl.textContent : '';
+      if (!source || !source.trim()) {
+        el.innerHTML = '<div style="color:#999;padding:16px;text-align:center;">No chart data</div>';
+        el.setAttribute('data-rendered', 'true');
+        return;
+      }
+      // Store source as data attribute for copy functionality
+      el.setAttribute('data-source', source);
+      // Hide the script tag and loading message
+      if (scriptEl) scriptEl.style.display = 'none';
+      var loadingEl = el.querySelector('.recharts-loading');
+      if (loadingEl) loadingEl.style.display = 'none';
+
+      // Parse the JSX-like source to extract chart configuration
+      var chartType = '';
+      var typeMatch = source.match(/^\\s*<(LineChart|BarChart|PieChart|AreaChart|ComposedChart|ScatterChart|RadarChart)/);
+      if (typeMatch) {
+        chartType = typeMatch[1];
+      } else {
+        el.innerHTML = '<div style="color:#c00;padding:8px;">Unknown chart type</div>';
+        el.setAttribute('data-rendered', 'true');
+        return;
+      }
+
+      // Extract width and height
+      var width = 500, height = 300;
+      var sizeMatch = source.match(/width=\\{(\\d+)\\}/);
+      if (sizeMatch) width = parseInt(sizeMatch[1]);
+      sizeMatch = source.match(/height=\\{(\\d+)\\}/);
+      if (sizeMatch) height = parseInt(sizeMatch[1]);
+
+      // Extract data - find the data={[...]} pattern
+      var data = [];
+      var dataStart = source.indexOf('data={[');
+      if (dataStart !== -1) {
+        var bracketCount = 0;
+        var dataEnd = dataStart + 7; // start at '[' (after 'data={[')
+        // Start counting from '[' position
+        for (var i = dataStart + 6; i < source.length; i++) {
+          if (source[i] === '[' || source[i] === '{') bracketCount++;
+          if (source[i] === ']' || source[i] === '}') bracketCount--;
+          if (bracketCount === 0) {
+            dataEnd = i + 1;
+            break;
+          }
+        }
+        // Extract just the array part: [...]
+        var dataStr = source.substring(dataStart + 6, dataEnd);
+        try {
+          data = (new Function('return ' + dataStr))();
+        } catch(e) {
+          console.warn('Data parse error:', e, 'dataStr:', dataStr);
+        }
+      }
+
+      // Build children array
+      var children = [];
+
+      // CartesianGrid
+      if (source.indexOf('<CartesianGrid') !== -1) {
+        var dashMatch = source.match(/strokeDasharray="([^"]+)"/);
+        children.push(React.createElement(RC.CartesianGrid, {
+          key: 'grid',
+          strokeDasharray: dashMatch ? dashMatch[1] : '3 3'
+        }));
+      }
+
+      // XAxis
+      if (source.indexOf('<XAxis') !== -1) {
+        var xKeyMatch = source.match(/<XAxis[^>]*dataKey="([^"]+)"/);
+        children.push(React.createElement(RC.XAxis, {
+          key: 'xaxis',
+          dataKey: xKeyMatch ? xKeyMatch[1] : undefined
+        }));
+      }
+
+      // YAxis
+      if (source.indexOf('<YAxis') !== -1) {
+        children.push(React.createElement(RC.YAxis, { key: 'yaxis' }));
+      }
+
+      // Tooltip
+      if (source.indexOf('<Tooltip') !== -1) {
+        children.push(React.createElement(RC.Tooltip, { key: 'tooltip' }));
+      }
+
+      // Legend
+      if (source.indexOf('<Legend') !== -1) {
+        children.push(React.createElement(RC.Legend, { key: 'legend' }));
+      }
+
+      // Line elements - handle different attribute orders
+      var lineMatches = source.match(/<Line[^/]*\\/>/g) || [];
+      lineMatches.forEach(function(lineStr, idx) {
+        var typeM = lineStr.match(/type="([^"]+)"/);
+        var keyM = lineStr.match(/dataKey="([^"]+)"/);
+        var strokeM = lineStr.match(/stroke="([^"]+)"/);
+        if (keyM) {
+          children.push(React.createElement(RC.Line, {
+            key: 'line-' + idx,
+            type: typeM ? typeM[1] : 'monotone',
+            dataKey: keyM[1],
+            stroke: strokeM ? strokeM[1] : '#8884d8'
+          }));
+        }
+      });
+
+      // Bar elements
+      var barMatches = source.match(/<Bar[^/]*\\/>/g) || [];
+      barMatches.forEach(function(barStr, idx) {
+        var keyM = barStr.match(/dataKey="([^"]+)"/);
+        var fillM = barStr.match(/fill="([^"]+)"/);
+        if (keyM) {
+          children.push(React.createElement(RC.Bar, {
+            key: 'bar-' + idx,
+            dataKey: keyM[1],
+            fill: fillM ? fillM[1] : '#8884d8'
+          }));
+        }
+      });
+
+      // Area elements
+      var areaMatches = source.match(/<Area[^/]*\\/>/g) || [];
+      areaMatches.forEach(function(areaStr, idx) {
+        var typeM = areaStr.match(/type="([^"]+)"/);
+        var keyM = areaStr.match(/dataKey="([^"]+)"/);
+        var stackM = areaStr.match(/stackId="([^"]+)"/);
+        var strokeM = areaStr.match(/stroke="([^"]+)"/);
+        var fillM = areaStr.match(/fill="([^"]+)"/);
+        if (keyM) {
+          children.push(React.createElement(RC.Area, {
+            key: 'area-' + idx,
+            type: typeM ? typeM[1] : 'monotone',
+            dataKey: keyM[1],
+            stackId: stackM ? stackM[1] : undefined,
+            stroke: strokeM ? strokeM[1] : '#8884d8',
+            fill: fillM ? fillM[1] : '#8884d8'
+          }));
+        }
+      });
+
+      // Pie element (for PieChart)
+      if (chartType === 'PieChart') {
+        var pieMatch = source.match(/<Pie[\\s\\S]*?(?=\\/>|>)/);
+        if (pieMatch) {
+          var pieStr = pieMatch[0];
+          // Extract pie data
+          var pieData = [];
+          var pieDataStart = pieStr.indexOf('data={[');
+          if (pieDataStart !== -1) {
+            var pBracketCount = 0;
+            var pDataEnd = pieDataStart + 6;
+            for (var pi = pDataEnd; pi < pieStr.length + 100 && pi < source.length; pi++) {
+              var ch = source[source.indexOf(pieStr) + pi - (pieDataStart - pieStr.indexOf('data={['))];
+              if (!ch) break;
+              if (ch === '[' || ch === '{') pBracketCount++;
+              if (ch === ']' || ch === '}') pBracketCount--;
+              if (pBracketCount === 0) {
+                pDataEnd = pi + 1;
+                break;
+              }
+            }
+            // Re-extract from source around Pie
+            var pieSection = source.substring(source.indexOf('<Pie'));
+            var pdStart = pieSection.indexOf('data={[');
+            if (pdStart !== -1) {
+              var pdBracket = 0;
+              var pdEnd = pdStart + 7;
+              // Start counting from '[' position
+              for (var pj = pdStart + 6; pj < pieSection.length; pj++) {
+                if (pieSection[pj] === '[' || pieSection[pj] === '{') pdBracket++;
+                if (pieSection[pj] === ']' || pieSection[pj] === '}') pdBracket--;
+                if (pdBracket === 0) { pdEnd = pj + 1; break; }
+              }
+              // Extract just the array part: [...]
+              var pieDataStr = pieSection.substring(pdStart + 6, pdEnd);
+              try {
+                pieData = (new Function('return ' + pieDataStr))();
+              } catch(e) {
+                console.warn('Pie data parse error:', e);
+              }
+            }
+          }
+
+          var cxM = pieStr.match(/cx="([^"]+)"/);
+          var cyM = pieStr.match(/cy="([^"]+)"/);
+          var orM = pieStr.match(/outerRadius=\\{?(\\d+)\\}?/);
+          var fillM = pieStr.match(/fill="([^"]+)"/);
+          var dkM = pieStr.match(/dataKey="([^"]+)"/);
+          var hasLabel = pieStr.indexOf('label') !== -1;
+
+          children.push(React.createElement(RC.Pie, {
+            key: 'pie',
+            data: pieData,
+            cx: cxM ? cxM[1] : '50%',
+            cy: cyM ? cyM[1] : '50%',
+            outerRadius: orM ? parseInt(orM[1]) : 80,
+            fill: fillM ? fillM[1] : '#8884d8',
+            dataKey: dkM ? dkM[1] : 'value',
+            label: hasLabel
+          }));
+        }
+      }
+
+      // Create chart component
+      var ChartComp = RC[chartType];
+      if (!ChartComp) {
+        el.innerHTML = '<div style="color:#c00;padding:8px;">Chart component not found: ' + chartType + '</div>';
+        el.setAttribute('data-rendered', 'true');
+        return;
+      }
+
+      var chartProps = { width: width, height: height };
+      if (chartType !== 'PieChart') {
+        chartProps.data = data;
+      }
+
+      // Debug info
+      console.log('Recharts rendering:', chartType, 'data:', data, 'children:', children.length);
+
+      var chartElement = React.createElement(ChartComp, chartProps, children);
+
+      // Create a wrapper div for React to render into
+      var renderTarget = document.createElement('div');
+      el.innerHTML = '';
+      el.appendChild(renderTarget);
+
+      // Render using React 18 API
+      try {
+        if (ReactDOM.createRoot) {
+          var root = ReactDOM.createRoot(renderTarget);
+          root.render(chartElement);
+        } else {
+          ReactDOM.render(chartElement, renderTarget);
+        }
+      } catch(renderErr) {
+        el.innerHTML = '<div style="color:#c00;padding:8px;border:1px solid #c00;border-radius:4px;font-size:12px;">React render error: ' + (renderErr.message || renderErr) + '</div>';
+      }
+
+      el.setAttribute('data-rendered', 'true');
+    } catch(e) {
+      console.error('Recharts error:', e);
+      el.innerHTML = '<div style="color:#c00;padding:8px;border:1px solid #c00;border-radius:4px;font-size:12px;">Recharts error: ' + (e.message || e) + '<br><br>Debug: chartType=' + (typeof chartType !== 'undefined' ? chartType : 'undefined') + ', dataLength=' + (typeof data !== 'undefined' ? data.length : 'undefined') + '</div>';
+      el.setAttribute('data-rendered', 'true');
+    }
+  });
+};
+
 // --- Render all diagrams ---
 window.renderAllDiagrams = function() {
   // Reset rendered state to support re-rendering after content/theme updates
@@ -1984,10 +2502,14 @@ window.renderAllDiagrams = function() {
   document.querySelectorAll('.graphviz[data-rendered]').forEach(function(el) {
     el.removeAttribute('data-rendered');
   });
+  document.querySelectorAll('.recharts[data-rendered]').forEach(function(el) {
+    el.removeAttribute('data-rendered');
+  });
   if (window.renderMermaid) window.renderMermaid();
   window.renderWaveDrom();
   window.renderGraphViz();
   window.renderVega();
+  window.renderRecharts();
   if (window._applyDiagramDarkFilter) window._applyDiagramDarkFilter();
 };
 
@@ -2021,11 +2543,12 @@ window._applyDiagramDarkFilter = function() {
 };
 
 // Initial render for non-mermaid diagrams (mermaid renders via its own script block)
-// Use window.onload to ensure all external scripts (vega, wavedrom, viz.js) are loaded
+// Use window.onload to ensure all external scripts (vega, wavedrom, viz.js, recharts) are loaded
 window.addEventListener('load', function() {
   window.renderWaveDrom();
   window.renderGraphViz();
   window.renderVega();
+  window.renderRecharts();
   window._applyDiagramDarkFilter();
 });
 // Also retry after a delay in case load event already fired or scripts are slow
@@ -2033,8 +2556,19 @@ setTimeout(function() {
   window.renderWaveDrom();
   window.renderGraphViz();
   window.renderVega();
+  window.renderRecharts();
   window._applyDiagramDarkFilter();
 }, 1500);
+
+// Recharts needs extra time to load (React + ReactDOM + Recharts)
+setTimeout(function() {
+  window.renderRecharts();
+}, 3000);
+
+// Final retry
+setTimeout(function() {
+  window.renderRecharts();
+}, 5000);
 </script>`;
   }
 

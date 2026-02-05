@@ -259,6 +259,15 @@ export class PreviewPanel {
       return;
     }
 
+    // Handle fetchUrl — fetch URL content via extension host (bypasses webview CORS)
+    if (message.command === 'fetchUrl') {
+      const [requestId, url] = (message.args || []) as [string, string];
+      if (requestId && url) {
+        this.handleFetchUrl(requestId, url);
+      }
+      return;
+    }
+
     // Forward to VS Code commands
     if (message.args) {
       vscode.commands.executeCommand(
@@ -333,6 +342,32 @@ export class PreviewPanel {
       vscode.window.showInformationMessage(`Saved to ${saveUri.fsPath}`);
     } catch (err) {
       vscode.window.showErrorMessage(`Failed to save file: ${err}`);
+    }
+  }
+
+  /**
+   * Fetch URL content and send back to webview (bypasses CORS)
+   */
+  private async handleFetchUrl(requestId: string, url: string): Promise<void> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const content = await response.text();
+      this.panel.webview.postMessage({
+        command: 'fetchUrlResponse',
+        requestId,
+        success: true,
+        content,
+      });
+    } catch (err) {
+      this.panel.webview.postMessage({
+        command: 'fetchUrlResponse',
+        requestId,
+        success: false,
+        error: String(err),
+      });
     }
   }
 

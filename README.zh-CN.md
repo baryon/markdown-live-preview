@@ -15,6 +15,8 @@
 | ![多种图像格式](screenshots/screenshoot-1.png) | ![MDX 支持](screenshots/screenshoot-2.png) |
 | **Marp 演示文稿** | **ASCII Mermaid** |
 | ![Marp 演示文稿](screenshots/screenshoot-3.png) | ![ASCII Mermaid](screenshots/screenshoot-4.png) |
+| **Recharts 图表** | |
+| ![Recharts 图表](screenshots/screenshoot-5.png) | |
 
 ## 为什么选择这个扩展
 
@@ -64,6 +66,26 @@ Bob --> Alice: Hi
 ````
 
 支持的语言：PlantUML、GraphViz/DOT、D2、Ditaa、BlockDiag、Mermaid、Nomnoml、Pikchr、Excalidraw、SVGBob、Structurizr、ERD、DBML、TikZ、WireViz 等。
+
+#### Recharts —— React 图表库
+
+使用 [Recharts](https://recharts.org) v3 以类 JSX 语法渲染交互式图表：
+
+````markdown
+```recharts
+<LineChart width={500} height={300} data={[
+  { name: 'Jan', value: 400 },
+  { name: 'Feb', value: 300 },
+  { name: 'Mar', value: 600 }
+]}>
+  <XAxis dataKey="name" />
+  <YAxis />
+  <Line type="monotone" dataKey="value" stroke="#8884d8" />
+</LineChart>
+```
+````
+
+支持的图表类型：`LineChart`、`BarChart`、`AreaChart`、`PieChart`、`ComposedChart`、`ScatterChart`、`RadarChart`。常用组件如 `XAxis`、`YAxis`、`CartesianGrid`、`Tooltip`、`Legend` 均可使用。
 
 #### 其他内置支持
 

@@ -15,6 +15,8 @@ A modern VS Code extension for previewing Markdown — built for the AI era, whe
 | ![Image Formats](screenshots/screenshoot-1.png) | ![MDX Support](screenshots/screenshoot-2.png) |
 | **Marp Presentations** | **ASCII Mermaid** |
 | ![Marp Presentations](screenshots/screenshoot-3.png) | ![ASCII Mermaid](screenshots/screenshoot-4.png) |
+| **Recharts** | |
+| ![Recharts](screenshots/screenshoot-5.png) | |
 
 ## Why This Extension
 
@@ -64,6 +66,26 @@ Bob --> Alice: Hi
 ````
 
 Supported languages: PlantUML, GraphViz/DOT, D2, Ditaa, BlockDiag, Mermaid, Nomnoml, Pikchr, Excalidraw, SVGBob, Structurizr, ERD, DBML, TikZ, WireViz, and more.
+
+#### Recharts — React Charts
+
+Render interactive charts using [Recharts](https://recharts.org) v3 with JSX-like syntax:
+
+````markdown
+```recharts
+<LineChart width={500} height={300} data={[
+  { name: 'Jan', value: 400 },
+  { name: 'Feb', value: 300 },
+  { name: 'Mar', value: 600 }
+]}>
+  <XAxis dataKey="name" />
+  <YAxis />
+  <Line type="monotone" dataKey="value" stroke="#8884d8" />
+</LineChart>
+```
+````
+
+Supported chart types: `LineChart`, `BarChart`, `AreaChart`, `PieChart`, `ComposedChart`, `ScatterChart`, `RadarChart`. Common components like `XAxis`, `YAxis`, `CartesianGrid`, `Tooltip`, `Legend` are all supported.
 
 #### Also Built-in
 

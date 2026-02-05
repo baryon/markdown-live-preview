@@ -184,6 +184,7 @@ const DIAGRAM_LANGUAGES: Record<string, string> = {
   'dot': 'graphviz',
   'vega': 'vega',
   'vega-lite': 'vega-lite',
+  'recharts': 'recharts',
 };
 
 /**
@@ -503,11 +504,24 @@ function installDiagramFenceRenderer(
     // {kroki=true} → render via Kroki server
     if (attrs.kroki === 'true' && KROKI_LANGUAGES.has(language)) {
       const encoded = krokiEncode(content);
-      return `<div class="kroki-diagram"${dlAttr}><img src="https://kroki.io/${encodeURIComponent(
-        language,
-      )}/svg/${encoded}" alt="${escapeHtmlForFence(
-        language,
-      )} diagram" /></div>\n`;
+      const krokiUrl = `https://kroki.io/${encodeURIComponent(language)}/svg/${encoded}`;
+      const krokiControls =
+        `<div class="diagram-controls">` +
+        `<button class="diagram-toggle-btn" title="Toggle controls">⋯</button>` +
+        `<div class="diagram-controls-expanded">` +
+        `<button class="diagram-copy-source-btn" title="Copy source code">Code</button>` +
+        `<button class="diagram-copy-svg-btn" title="Copy as SVG">SVG</button>` +
+        `<button class="diagram-copy-png-btn" title="Copy as PNG">PNG</button>` +
+        `</div>` +
+        `</div>`;
+      return (
+        `<div class="diagram-container kroki-container"${dlAttr}>` +
+        krokiControls +
+        `<div class="kroki-diagram" data-source="${escapeHtmlForFence(content)}" data-svg-url="${escapeHtmlForFence(krokiUrl)}">` +
+        `<img src="${krokiUrl}" alt="${escapeHtmlForFence(language)} diagram" />` +
+        `</div>` +
+        `</div>\n`
+      );
     }
 
     const diagramClass = DIAGRAM_LANGUAGES[language];
@@ -515,6 +529,10 @@ function installDiagramFenceRenderer(
       // Build diagram controls HTML
       const buildDiagramControls = (isMermaid: boolean): string => {
         let controls = `<div class="diagram-controls">`;
+        // Toggle button (always visible)
+        controls += `<button class="diagram-toggle-btn" title="Toggle controls">⋯</button>`;
+        // Expandable buttons container
+        controls += `<div class="diagram-controls-expanded">`;
         controls += `<button class="diagram-copy-source-btn" title="Copy source code">Code</button>`;
         controls += `<button class="diagram-copy-svg-btn" title="Copy as SVG">SVG</button>`;
         controls += `<button class="diagram-copy-png-btn" title="Copy as PNG">PNG</button>`;
@@ -542,6 +560,7 @@ function installDiagramFenceRenderer(
           controls += `</select>`;
           controls += `<button class="diagram-ascii-btn" title="Toggle ASCII mode">ASCII</button>`;
         }
+        controls += `</div>`; // close diagram-controls-expanded
         controls += `</div>`;
         return controls;
       };
@@ -592,10 +611,31 @@ function installDiagramFenceRenderer(
           `</div>\n`
         );
       }
+
+      // Recharts: React-based charting library, store source in script tag
+      if (diagramClass === 'recharts') {
+        const id = `recharts-${idx}`;
+        const controls = buildDiagramControls(false);
+        return (
+          `<div class="diagram-container recharts-container"${dlAttr}>` +
+          controls +
+          `<div class="recharts" id="${id}">` +
+          `<script type="text/recharts">${content}</script>` +
+          `<div class="recharts-loading" style="padding:20px;text-align:center;color:#666;">` +
+          `<span>📊 Loading Recharts...</span>` +
+          `</div>` +
+          `</div>` +
+          `</div>\n`
+        );
+      }
     }
 
-    // For non-diagram languages, use the default renderer
-    return defaultFence(tokens, idx, options, env, self);
+    // For non-diagram languages, render as code block with line numbers and copy button
+    return generateLineNumberedCodeBlock(
+      content,
+      language,
+      dataLine ?? undefined,
+    );
   };
 }
 
