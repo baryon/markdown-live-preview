@@ -8,10 +8,13 @@ const markdownItEmoji = require('markdown-it-emoji');
 const markdownItFootnote = require('markdown-it-footnote');
 const markdownItSub = require('markdown-it-sub');
 const markdownItSup = require('markdown-it-sup');
+const markdownItMark = require('markdown-it-mark');
 const markdownItTaskLists = require('markdown-it-task-lists');
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 type MarkdownItType = ReturnType<typeof MarkdownIt>;
+
+import { extname } from 'node:path';
 
 import { getFullConfig } from '../config/ConfigManager';
 import type { MarkdownLivePreviewConfig } from '../types';
@@ -69,9 +72,10 @@ export function createMarkdownParser(
   // Enable footnote plugin
   md.use(markdownItFootnote);
 
-  // Enable subscript/superscript
+  // Enable subscript/superscript/highlight
   md.use(markdownItSub);
   md.use(markdownItSup);
+  md.use(markdownItMark);
 
   // Enable task lists
   md.use(markdownItTaskLists, {
@@ -84,6 +88,9 @@ export function createMarkdownParser(
   if (config.wikiLink.enabled) {
     enableWikiLinks(md, config);
   }
+
+  // Obsidian-style %%comment%% stripping
+  enableObsidianComments(md);
 
   // Custom fence renderer for diagram languages (mermaid, etc.)
   installDiagramFenceRenderer(md, config.codeChunk.enableScriptExecution);
@@ -113,6 +120,38 @@ export function createMarkdownParser(
     'heading_ids',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (state: { tokens: any[] }) => {
+      // First pass: collect fragment-only link anchors → build map of link text → anchor
+      const linkAnchors = new Map<string, string>();
+      for (let i = 0; i < state.tokens.length; i++) {
+        if (state.tokens[i].type !== 'inline') continue;
+        const children = state.tokens[i].children || [];
+        for (let j = 0; j < children.length; j++) {
+          if (children[j].type !== 'link_open') continue;
+          const href = children[j].attrGet
+            ? children[j].attrGet('href')
+            : null;
+          if (!href || !href.startsWith('#') || href.length <= 1) continue;
+          // Collect link text until link_close
+          let linkText = '';
+          for (
+            let k = j + 1;
+            k < children.length && children[k].type !== 'link_close';
+            k++
+          ) {
+            if (
+              children[k].type === 'text' ||
+              children[k].type === 'code_inline'
+            ) {
+              linkText += children[k].content;
+            }
+          }
+          if (linkText) {
+            linkAnchors.set(linkText.trim().toLowerCase(), href.slice(1));
+          }
+        }
+      }
+
+      // Second pass: assign heading IDs
       const slugCounts: Record<string, number> = {};
 
       for (let i = 0; i < state.tokens.length; i++) {
@@ -138,6 +177,12 @@ export function createMarkdownParser(
           token.attrSet('data-toc-ignore', 'true');
         }
 
+        // Extract custom ID from {#custom-id} syntax
+        const customIdMatch = fullText.match(
+          /\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/,
+        );
+        const customId = customIdMatch ? customIdMatch[1] : null;
+
         // Strip {attr} syntax from inline children so it doesn't render
         for (const child of children) {
           if (child.type === 'text') {
@@ -155,8 +200,9 @@ export function createMarkdownParser(
           }
         }
 
-        // Generate slug and handle duplicates
-        let slug = generateSlug(fullText);
+        // Priority: {#custom-id} > link anchor reference > auto slug
+        const linkedAnchor = linkAnchors.get(fullText.trim().toLowerCase());
+        let slug = customId || linkedAnchor || generateSlug(fullText);
         if (!slug) slug = 'heading';
         if (slugCounts[slug] !== undefined) {
           slugCounts[slug]++;
@@ -640,6 +686,29 @@ function installDiagramFenceRenderer(
 }
 
 /**
+ * Strip Obsidian-style %%comment%% syntax from rendered output.
+ * Removes both inline %%...%% within text tokens.
+ */
+function enableObsidianComments(md: MarkdownItType): void {
+  md.core.ruler.push('obsidian_comments', (state) => {
+    for (let i = 0; i < state.tokens.length; i++) {
+      if (state.tokens[i].type !== 'inline') continue;
+      const children = state.tokens[i].children;
+      if (!children) continue;
+      for (let j = 0; j < children.length; j++) {
+        if (children[j].type === 'text') {
+          children[j].content = children[j].content.replace(/%%[^%]*%%/g, '');
+        }
+      }
+      // Remove empty text tokens
+      state.tokens[i].children = children.filter(
+        (t) => !(t.type === 'text' && t.content === ''),
+      );
+    }
+  });
+}
+
+/**
  * Enable wiki link support in markdown-it
  */
 function enableWikiLinks(
@@ -647,7 +716,9 @@ function enableWikiLinks(
   config: MarkdownLivePreviewConfig,
 ): void {
   // Wiki link pattern: [[link]] or [[link|text]] or [[text|link]]
-  const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+  // Also captures optional preceding `!` for Obsidian-style image embeds: ![[image.png]]
+  const wikiLinkRegex = /(!?)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+  const imageExtensions = new Set(['.jpg', '.jpeg', '.gif', '.png', '.apng', '.svg', '.bmp', '.webp']);
 
   md.core.ruler.push('wiki_link', (state) => {
     const tokens = state.tokens;
@@ -680,7 +751,7 @@ function enableWikiLinks(
         let lastIndex = 0;
 
         for (const match of matches) {
-          const [fullMatch, firstPart, secondPart] = match;
+          const [fullMatch, excl, firstPart, secondPart] = match;
           const matchIndex = match.index!;
 
           // Add text before the match
@@ -709,32 +780,57 @@ function enableWikiLinks(
             linkText = firstPart.trim();
           }
 
-          // Add file extension if not present
-          if (
-            !linkTarget.includes('.') &&
-            config.wikiLink.targetFileExtension
-          ) {
-            linkTarget += config.wikiLink.targetFileExtension;
+          // Extract anchor fragment before file extension/case transforms
+          let anchorFragment = '';
+          const hashIndex = linkTarget.indexOf('#');
+          if (hashIndex !== -1) {
+            anchorFragment = linkTarget.slice(hashIndex + 1);
+            linkTarget = linkTarget.slice(0, hashIndex);
           }
 
-          // Apply case transformation
-          linkTarget = applyCase(
-            linkTarget,
-            config.wikiLink.targetFileNameChangeCase,
-          );
+          // Add file extension and case transform only when there is a file path
+          if (linkTarget) {
+            if (
+              !linkTarget.includes('.') &&
+              config.wikiLink.targetFileExtension
+            ) {
+              linkTarget += config.wikiLink.targetFileExtension;
+            }
 
-          // Create link tokens
-          const linkOpenToken = new state.Token('link_open', 'a', 1);
-          linkOpenToken.attrs = [['href', linkTarget]];
-          linkOpenToken.attrSet('class', 'wiki-link');
-          newTokens.push(linkOpenToken);
+            // Apply case transformation
+            linkTarget = applyCase(
+              linkTarget,
+              config.wikiLink.targetFileNameChangeCase,
+            );
+          }
 
-          const textToken = new state.Token('text', '', 0);
-          textToken.content = linkText;
-          newTokens.push(textToken);
+          if (excl === '!' && imageExtensions.has(extname(linkTarget).toLowerCase())) {
+            // Obsidian-style image embed: ![[image.png]] or ![[image.png|alt text]]
+            const altText = secondPart !== undefined
+              ? (config.wikiLink.useGitHubStylePipedLink ? firstPart.trim() : secondPart.trim())
+              : firstPart.trim();
+            const imgToken = new state.Token('html_inline', '', 0);
+            imgToken.content = `<img src="${linkTarget}" alt="${altText}" class="wiki-image">`;
+            newTokens.push(imgToken);
+          } else {
+            // Re-append anchor fragment as slug for link hrefs
+            if (anchorFragment) {
+              linkTarget += '#' + generateSlug(anchorFragment);
+            }
 
-          const linkCloseToken = new state.Token('link_close', 'a', -1);
-          newTokens.push(linkCloseToken);
+            // Create link tokens
+            const linkOpenToken = new state.Token('link_open', 'a', 1);
+            linkOpenToken.attrs = [['href', linkTarget]];
+            linkOpenToken.attrSet('class', 'wiki-link');
+            newTokens.push(linkOpenToken);
+
+            const textToken = new state.Token('text', '', 0);
+            textToken.content = linkText;
+            newTokens.push(textToken);
+
+            const linkCloseToken = new state.Token('link_close', 'a', -1);
+            newTokens.push(linkCloseToken);
+          }
 
           lastIndex = matchIndex + fullMatch.length;
         }

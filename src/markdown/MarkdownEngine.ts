@@ -77,6 +77,7 @@ export class MarkdownEngine {
   ): Promise<{
     html: string;
     tocHTML: string;
+    frontMatterForTOC: string;
     JSAndCssFiles: string[];
     yamlConfig: Record<string, unknown>;
   }> {
@@ -117,6 +118,9 @@ export class MarkdownEngine {
       }
     }
 
+    // Process Obsidian-style callouts
+    html = this.processCallouts(html);
+
     // Process math expressions
     html = this.katexRenderer.processMathInContent(html);
 
@@ -125,6 +129,9 @@ export class MarkdownEngine {
 
     // Generate TOC HTML
     const tocHTML = this.generateTOC(markdown, frontMatter);
+
+    // Generate front matter HTML for TOC sidebar panel
+    const frontMatterForTOC = this.generateFrontMatterForTOC(frontMatter);
 
     // Replace [TOC] placeholder in rendered HTML
     // Note: <p> may have attributes like data-line from source_line_mapping
@@ -155,6 +162,7 @@ export class MarkdownEngine {
     return {
       html,
       tocHTML,
+      frontMatterForTOC,
       JSAndCssFiles,
       yamlConfig: {
         ...yamlConfig,
@@ -178,15 +186,16 @@ export class MarkdownEngine {
     }
 
     // Parse the markdown
-    const { html, tocHTML, yamlConfig } = await this.parseMD(inputString, {
-      sourceUri: templateConfig?.sourceUri,
-    });
+    const { html, tocHTML, frontMatterForTOC, yamlConfig } =
+      await this.parseMD(inputString, {
+        sourceUri: templateConfig?.sourceUri,
+      });
 
     // Get theme CSS
     const themeCSS = this.getThemeCSS();
 
     // Sidebar TOC: always hidden by default, toggled via context menu
-    const hasTOC = tocHTML.length > 0;
+    const hasTOC = tocHTML.length > 0 || frontMatterForTOC.length > 0;
 
     // Generate the HTML template
     const template = `
@@ -206,6 +215,7 @@ export class MarkdownEngine {
 </head>
 <body class="vscode-body ${yamlConfig.class || ''}" data-theme="system" data-has-toc="${hasTOC}">
   <div id="toc-container" class="hidden">
+    ${frontMatterForTOC}
     ${tocHTML}
   </div>
   <div id="preview-root">
@@ -242,8 +252,9 @@ export class MarkdownEngine {
             if (message.tocHTML !== undefined) {
               var tocContainer = document.getElementById('toc-container');
               if (tocContainer) {
-                tocContainer.innerHTML = message.tocHTML;
-                var hasToc = message.tocHTML.length > 0;
+                var fmHTML = message.frontMatterForTOC || '';
+                tocContainer.innerHTML = fmHTML + message.tocHTML;
+                var hasToc = message.tocHTML.length > 0 || fmHTML.length > 0;
                 document.body.setAttribute('data-has-toc', String(hasToc));
                 // If TOC became empty, hide the sidebar
                 if (!hasToc) {
@@ -1118,6 +1129,38 @@ export class MarkdownEngine {
   }
 
   /**
+   * Generate front matter HTML for the TOC sidebar panel
+   */
+  private generateFrontMatterForTOC(
+    frontMatter: Record<string, unknown> | null,
+  ): string {
+    if (!frontMatter || Object.keys(frontMatter).length === 0) return '';
+
+    let html = '<div class="toc-front-matter">';
+    html += '<div class="toc-fm-title">Front Matter</div>';
+    html += '<dl class="toc-fm-list">';
+
+    for (const [key, value] of Object.entries(frontMatter)) {
+      html += `<dt>${this.escapeHtml(key)}</dt>`;
+      const strValue =
+        typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+      const MAX_LEN = 80;
+      const lines = strValue.split('\n');
+      if (lines.length > 3 || strValue.length > MAX_LEN) {
+        const preview = lines.slice(0, 2).join('\n').substring(0, MAX_LEN);
+        const lineCount = lines.length;
+        html += `<dd class="toc-fm-truncated" title="${this.escapeHtml(strValue)}">${this.escapeHtml(preview)}... <span class="toc-fm-hint">(${lineCount} lines)</span></dd>`;
+      } else {
+        html += `<dd>${this.escapeHtml(strValue)}</dd>`;
+      }
+    }
+
+    html += '</dl></div>';
+    return html;
+  }
+
+  /**
    * Process code blocks with syntax highlighting
    */
   private async processCodeBlocks(html: string): Promise<string> {
@@ -1162,6 +1205,14 @@ export class MarkdownEngine {
     const depthTo = (tocConfig.depth_to as number) || 6;
     const ordered = !!tocConfig.ordered;
 
+    // Collect fragment-only link anchors: [text](#anchor) → map link text → anchor
+    const linkAnchors = new Map<string, string>();
+    const linkRegex = /\[([^\]]+)\]\(#([^)]+)\)/g;
+    let linkMatch: RegExpExecArray | null;
+    while ((linkMatch = linkRegex.exec(markdown)) !== null) {
+      linkAnchors.set(linkMatch[1].trim().toLowerCase(), linkMatch[2]);
+    }
+
     const headingRegex = /^(#{1,6})\s+(.+)$/gm;
     const headings: Array<{ level: number; text: string; id: string }> = [];
     const slugCounts: Record<string, number> = {};
@@ -1181,11 +1232,18 @@ export class MarkdownEngine {
         continue;
       }
 
+      // Extract custom ID from {#custom-id} syntax
+      const customIdMatch = rawText.match(
+        /\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/,
+      );
+      const customId = customIdMatch ? customIdMatch[1] : null;
+
       // Strip {attr} syntax for display text
       const text = rawText.replace(/\s*\{[^}]*\}\s*/g, '').trim();
 
-      // Generate slug consistent with heading_ids rule
-      let slug = generateSlug(rawText);
+      // Priority: {#custom-id} > link anchor reference > auto slug
+      const linkedAnchor = linkAnchors.get(text.toLowerCase());
+      let slug = customId || linkedAnchor || generateSlug(rawText);
       if (!slug) slug = 'heading';
       if (slugCounts[slug] !== undefined) {
         slugCounts[slug]++;
@@ -1522,6 +1580,38 @@ export class MarkdownEngine {
         padding: 0.5em 1em;
         color: var(--blockquote-fg);
       }
+      mark {
+        background-color: var(--mark-bg);
+        color: var(--mark-fg);
+        padding: 0.1em 0.2em;
+        border-radius: 2px;
+      }
+      /* Obsidian-style callouts */
+      .callout {
+        border-left-width: 4px;
+        border-left-style: solid;
+        border-radius: 4px;
+        padding: 0.5em 1em;
+        margin: 1em 0;
+      }
+      .callout-title {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+        font-weight: 600;
+      }
+      .callout-icon {
+        font-style: normal;
+      }
+      .callout-note, .callout-info { border-left-color: #448aff; background-color: rgba(68,138,255,0.1); }
+      .callout-tip, .callout-success { border-left-color: #00c853; background-color: rgba(0,200,83,0.1); }
+      .callout-warning, .callout-caution { border-left-color: #ff9100; background-color: rgba(255,145,0,0.1); }
+      .callout-important, .callout-danger, .callout-failure { border-left-color: #ff5252; background-color: rgba(255,82,82,0.1); }
+      .callout-question { border-left-color: #ffab00; background-color: rgba(255,171,0,0.1); }
+      .callout-bug { border-left-color: #d50000; background-color: rgba(213,0,0,0.1); }
+      .callout-example { border-left-color: #7c4dff; background-color: rgba(124,77,255,0.1); }
+      .callout-quote, .callout-abstract { border-left-color: #9e9e9e; background-color: rgba(158,158,158,0.1); }
+      .callout-todo { border-left-color: #448aff; background-color: rgba(68,138,255,0.1); }
       table {
         border-collapse: collapse;
         width: 100%;
@@ -1612,6 +1702,46 @@ export class MarkdownEngine {
       }
       .toc a:hover {
         text-decoration: underline;
+      }
+
+      /* TOC Panel Front Matter */
+      .toc-front-matter {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9em;
+      }
+      .toc-fm-title {
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: var(--text-secondary, #888);
+        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .toc-fm-list {
+        margin: 0;
+      }
+      .toc-fm-list dt {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-top: 4px;
+        font-size: 0.9em;
+      }
+      .toc-fm-list dd {
+        margin-left: 0;
+        padding-left: 8px;
+        color: var(--text-secondary, #888);
+        font-size: 0.85em;
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
+      .toc-fm-truncated {
+        cursor: help;
+      }
+      .toc-fm-hint {
+        opacity: 0.6;
+        font-style: italic;
       }
 
       /* Mermaid ASCII rendering */
@@ -3479,6 +3609,8 @@ body.vscode-high-contrast .ctx-sep {
         --blockquote-fg: #6a737d;
         --th-bg: #f6f8fa;
         --shadow: rgba(0,0,0,0.06);
+        --mark-bg: #fff3aa;
+        --mark-fg: #24292e;
       }
 
       /* ===== Dark theme ===== */
@@ -3498,6 +3630,8 @@ body.vscode-high-contrast .ctx-sep {
         --blockquote-fg: #8b949e;
         --th-bg: #161b22;
         --shadow: rgba(0,0,0,0.3);
+        --mark-bg: #5c4b00;
+        --mark-fg: #e6d9a8;
       }
 
       /* System-follow: match OS preference */
@@ -3517,6 +3651,8 @@ body.vscode-high-contrast .ctx-sep {
           --blockquote-fg: #8b949e;
           --th-bg: #161b22;
           --shadow: rgba(0,0,0,0.3);
+          --mark-bg: #5c4b00;
+          --mark-fg: #e6d9a8;
         }
       }
 
@@ -3538,8 +3674,46 @@ body.vscode-high-contrast .ctx-sep {
   }
 
   /**
-   * Escape HTML entities
+   * Get SVG icon for a callout type.
    */
+  private static getCalloutIcon(type: string): string {
+    const icons: Record<string, string> = {
+      note: '&#9998;',      // ✎ pencil
+      info: '&#8505;',      // ℹ info
+      tip: '&#128161;',     // 💡 lightbulb
+      success: '&#10004;',  // ✔ check
+      warning: '&#9888;',   // ⚠ warning
+      caution: '&#9888;',   // ⚠ warning
+      important: '&#10071;',// ❗ exclamation
+      danger: '&#9889;',    // ⚡ zap
+      failure: '&#10008;',  // ✘ cross
+      question: '&#10067;', // ❓ question
+      bug: '&#128027;',     // 🐛 bug
+      example: '&#128196;', // 📄 document
+      quote: '&#10078;',    // ❞ quote
+      abstract: '&#128203;',// 📋 clipboard
+      todo: '&#9744;',      // ☐ checkbox
+    };
+    return icons[type] || icons.note;
+  }
+
+  /**
+   * Process Obsidian-style callouts in rendered HTML.
+   * Transforms `<blockquote><p>[!type] title</p>` into styled callout blocks.
+   */
+  private processCallouts(html: string): string {
+    // Match blockquote whose first <p> starts with [!type]
+    return html.replace(
+      /<blockquote([^>]*)>\s*<p>\[!(\w+)\]\s*(.*?)<\/p>/gi,
+      (_match, attrs, type, titleContent) => {
+        const normalizedType = type.toLowerCase();
+        const icon = MarkdownEngine.getCalloutIcon(normalizedType);
+        const title = titleContent.trim() || normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1);
+        return `<blockquote${attrs} class="callout callout-${normalizedType}"><p><strong class="callout-title"><span class="callout-icon">${icon}</span> ${title}</strong></p>`;
+      },
+    );
+  }
+
   /**
    * Resolve relative image paths in rendered HTML to data URIs.
    * Standard markdown ![alt](relative/path.png) renders as <img src="relative/path.png">

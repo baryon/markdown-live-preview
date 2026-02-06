@@ -638,6 +638,7 @@
     "markdown-it": "^14.1.0",
     "markdown-it-emoji": "^3.0.0",
     "markdown-it-footnote": "^4.0.0",
+    "markdown-it-mark": "^4.0.0",
     "markdown-it-sub": "^2.0.0",
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
@@ -645,11 +646,11 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
     "@types/katex": "^0.16.7",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "16",
     "@types/vscode": "1.70.0",
-    "@biomejs/biome": "^2.0.0",
     "@vscode/test-web": "^0.0.67",
     "esbuild": "^0.25.0",
     "esbuild-plugin-polyfill-node": "^0.3.0",
