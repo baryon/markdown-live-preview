@@ -127,9 +127,7 @@ export function createMarkdownParser(
         const children = state.tokens[i].children || [];
         for (let j = 0; j < children.length; j++) {
           if (children[j].type !== 'link_open') continue;
-          const href = children[j].attrGet
-            ? children[j].attrGet('href')
-            : null;
+          const href = children[j].attrGet ? children[j].attrGet('href') : null;
           if (!href || !href.startsWith('#') || href.length <= 1) continue;
           // Collect link text until link_close
           let linkText = '';
@@ -178,9 +176,7 @@ export function createMarkdownParser(
         }
 
         // Extract custom ID from {#custom-id} syntax
-        const customIdMatch = fullText.match(
-          /\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/,
-        );
+        const customIdMatch = fullText.match(/\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/);
         const customId = customIdMatch ? customIdMatch[1] : null;
 
         // Strip {attr} syntax from inline children so it doesn't render
@@ -718,7 +714,16 @@ function enableWikiLinks(
   // Wiki link pattern: [[link]] or [[link|text]] or [[text|link]]
   // Also captures optional preceding `!` for Obsidian-style image embeds: ![[image.png]]
   const wikiLinkRegex = /(!?)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-  const imageExtensions = new Set(['.jpg', '.jpeg', '.gif', '.png', '.apng', '.svg', '.bmp', '.webp']);
+  const imageExtensions = new Set([
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.png',
+    '.apng',
+    '.svg',
+    '.bmp',
+    '.webp',
+  ]);
 
   md.core.ruler.push('wiki_link', (state) => {
     const tokens = state.tokens;
@@ -804,11 +809,17 @@ function enableWikiLinks(
             );
           }
 
-          if (excl === '!' && imageExtensions.has(extname(linkTarget).toLowerCase())) {
+          if (
+            excl === '!' &&
+            imageExtensions.has(extname(linkTarget).toLowerCase())
+          ) {
             // Obsidian-style image embed: ![[image.png]] or ![[image.png|alt text]]
-            const altText = secondPart !== undefined
-              ? (config.wikiLink.useGitHubStylePipedLink ? firstPart.trim() : secondPart.trim())
-              : firstPart.trim();
+            const altText =
+              secondPart !== undefined
+                ? config.wikiLink.useGitHubStylePipedLink
+                  ? firstPart.trim()
+                  : secondPart.trim()
+                : firstPart.trim();
             const imgToken = new state.Token('html_inline', '', 0);
             imgToken.content = `<img src="${linkTarget}" alt="${altText}" class="wiki-image">`;
             newTokens.push(imgToken);

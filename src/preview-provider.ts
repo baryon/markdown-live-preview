@@ -356,7 +356,8 @@ export class PreviewProvider {
               if (requestId && url) {
                 fetch(url)
                   .then((response) => {
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    if (!response.ok)
+                      throw new Error(`HTTP ${response.status}`);
                     return response.text();
                   })
                   .then((content) => {
@@ -719,15 +720,20 @@ export class PreviewProvider {
 
       for (const preview of currentPreviews) {
         try {
-          const { html, tocHTML, frontMatterForTOC, JSAndCssFiles, yamlConfig } =
-            await engine.parseMD(text, {
-              isForPreview: true,
-              useRelativeFilePath: false,
-              hideFrontMatter: false,
-              triggeredBySave,
-              vscodePreviewPanel: preview,
-              sourceUri: sourceUri.toString(),
-            });
+          const {
+            html,
+            tocHTML,
+            frontMatterForTOC,
+            JSAndCssFiles,
+            yamlConfig,
+          } = await engine.parseMD(text, {
+            isForPreview: true,
+            useRelativeFilePath: false,
+            hideFrontMatter: false,
+            triggeredBySave,
+            vscodePreviewPanel: preview,
+            sourceUri: sourceUri.toString(),
+          });
 
           if (!this.isSinglePreviewTarget(sourceUri)) {
             return;

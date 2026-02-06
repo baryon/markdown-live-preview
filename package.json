@@ -643,6 +643,7 @@
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
     "shiki": "^1.29.2",
+    "sucrase": "^3.35.1",
     "yaml": "^2.7.0"
   },
   "devDependencies": {

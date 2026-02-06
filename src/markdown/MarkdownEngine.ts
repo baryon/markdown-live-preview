@@ -13,6 +13,7 @@ import {
   type RendererOptions,
 } from '../types';
 import { generateSlug, MarkdownParser } from './MarkdownParser';
+import { MdxProcessor } from './MdxProcessor';
 import { type CodeRenderer, getCodeRenderer } from './renderers/CodeRenderer';
 import { getKatexRenderer, KatexRenderer } from './renderers/KatexRenderer';
 
@@ -104,6 +105,22 @@ export class MarkdownEngine {
       }
     }
 
+    // Process MDX content (JSX expressions, exports, styled blocks) for .mdx files
+    if (options?.sourceUri) {
+      try {
+        const ext = path
+          .extname(vscode.Uri.parse(options.sourceUri).fsPath)
+          .toLowerCase();
+        if (ext === '.mdx') {
+          const mdxProcessor = new MdxProcessor();
+          const mdxResult = mdxProcessor.process(processedContent);
+          processedContent = mdxResult.content;
+        }
+      } catch (error) {
+        console.warn('Failed to process MDX content:', error);
+      }
+    }
+
     // Render markdown to HTML
     // (Mermaid blocks are handled by the custom fence renderer in MarkdownParser)
     let html = this.parser.render(processedContent, { lineOffset });
@@ -186,10 +203,12 @@ export class MarkdownEngine {
     }
 
     // Parse the markdown
-    const { html, tocHTML, frontMatterForTOC, yamlConfig } =
-      await this.parseMD(inputString, {
+    const { html, tocHTML, frontMatterForTOC, yamlConfig } = await this.parseMD(
+      inputString,
+      {
         sourceUri: templateConfig?.sourceUri,
-      });
+      },
+    );
 
     // Get theme CSS
     const themeCSS = this.getThemeCSS();
@@ -1233,9 +1252,7 @@ export class MarkdownEngine {
       }
 
       // Extract custom ID from {#custom-id} syntax
-      const customIdMatch = rawText.match(
-        /\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/,
-      );
+      const customIdMatch = rawText.match(/\{[^}]*#([a-zA-Z0-9_-]+)[^}]*\}/);
       const customId = customIdMatch ? customIdMatch[1] : null;
 
       // Strip {attr} syntax for display text
@@ -2518,7 +2535,7 @@ window.renderRecharts = function() {
 
       // Pie element (for PieChart)
       if (chartType === 'PieChart') {
-        var pieMatch = source.match(/<Pie[\\s\\S]*?(?=\\/>|>)/);
+        var pieMatch = source.match(/<Pie[\\s\\n][\\s\\S]*?(?=\\/>|>)/);
         if (pieMatch) {
           var pieStr = pieMatch[0];
           // Extract pie data
@@ -3678,21 +3695,21 @@ body.vscode-high-contrast .ctx-sep {
    */
   private static getCalloutIcon(type: string): string {
     const icons: Record<string, string> = {
-      note: '&#9998;',      // ✎ pencil
-      info: '&#8505;',      // ℹ info
-      tip: '&#128161;',     // 💡 lightbulb
-      success: '&#10004;',  // ✔ check
-      warning: '&#9888;',   // ⚠ warning
-      caution: '&#9888;',   // ⚠ warning
-      important: '&#10071;',// ❗ exclamation
-      danger: '&#9889;',    // ⚡ zap
-      failure: '&#10008;',  // ✘ cross
+      note: '&#9998;', // ✎ pencil
+      info: '&#8505;', // ℹ info
+      tip: '&#128161;', // 💡 lightbulb
+      success: '&#10004;', // ✔ check
+      warning: '&#9888;', // ⚠ warning
+      caution: '&#9888;', // ⚠ warning
+      important: '&#10071;', // ❗ exclamation
+      danger: '&#9889;', // ⚡ zap
+      failure: '&#10008;', // ✘ cross
       question: '&#10067;', // ❓ question
-      bug: '&#128027;',     // 🐛 bug
+      bug: '&#128027;', // 🐛 bug
       example: '&#128196;', // 📄 document
-      quote: '&#10078;',    // ❞ quote
-      abstract: '&#128203;',// 📋 clipboard
-      todo: '&#9744;',      // ☐ checkbox
+      quote: '&#10078;', // ❞ quote
+      abstract: '&#128203;', // 📋 clipboard
+      todo: '&#9744;', // ☐ checkbox
     };
     return icons[type] || icons.note;
   }
@@ -3708,7 +3725,9 @@ body.vscode-high-contrast .ctx-sep {
       (_match, attrs, type, titleContent) => {
         const normalizedType = type.toLowerCase();
         const icon = MarkdownEngine.getCalloutIcon(normalizedType);
-        const title = titleContent.trim() || normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1);
+        const title =
+          titleContent.trim() ||
+          normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1);
         return `<blockquote${attrs} class="callout callout-${normalizedType}"><p><strong class="callout-title"><span class="callout-icon">${icon}</span> ${title}</strong></p>`;
       },
     );
