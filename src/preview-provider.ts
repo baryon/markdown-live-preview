@@ -719,7 +719,7 @@ export class PreviewProvider {
 
       for (const preview of currentPreviews) {
         try {
-          const { html, tocHTML, JSAndCssFiles, yamlConfig } =
+          const { html, tocHTML, frontMatterForTOC, JSAndCssFiles, yamlConfig } =
             await engine.parseMD(text, {
               isForPreview: true,
               useRelativeFilePath: false,
@@ -757,6 +757,7 @@ export class PreviewProvider {
               markdown: text,
               html,
               tocHTML,
+              frontMatterForTOC,
               totalLineCount: document.lineCount,
               sourceUri: sourceUri.toString(),
               sourceScheme: sourceUri.scheme,

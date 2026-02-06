@@ -147,13 +147,14 @@ export class PreviewPanel {
     try {
       const text = this.document.getText() ?? '';
 
-      const { html, tocHTML, yamlConfig } = await this.engine.parseMD(text, {
-        isForPreview: true,
-        useRelativeFilePath: false,
-        hideFrontMatter: false,
-        triggeredBySave,
-        vscodePreviewPanel: this.panel,
-      });
+      const { html, tocHTML, frontMatterForTOC, yamlConfig } =
+        await this.engine.parseMD(text, {
+          isForPreview: true,
+          useRelativeFilePath: false,
+          hideFrontMatter: false,
+          triggeredBySave,
+          vscodePreviewPanel: this.panel,
+        });
 
       // Check if resources changed or presentation mode
       if (yamlConfig.isPresentationMode) {
@@ -168,6 +169,7 @@ export class PreviewPanel {
         markdown: text,
         html,
         tocHTML,
+        frontMatterForTOC,
         totalLineCount: this.document.lineCount,
         sourceUri: this.sourceUri.toString(),
         sourceScheme: this.sourceUri.scheme,

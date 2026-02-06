@@ -126,7 +126,7 @@ style: |
 # AIは明日の経営を変える
 
 **李 龍（Li Long）**  
-株式会社ChainBow CEO
+株式会社ChainBow CEO/Founder
 
 AI・ブロックチェーン起業家  
 FormAgent / AI Debate 開発者
