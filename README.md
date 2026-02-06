@@ -93,6 +93,29 @@ Supported chart types: `LineChart`, `BarChart`, `AreaChart`, `PieChart`, `Compos
 - **Viz/DOT** — GraphViz diagrams (client-side)
 - **Vega / Vega-Lite** — data visualizations
 
+### MDX Support
+
+`.mdx` files get full JSX expression evaluation and rendering. Inline expressions, exported variables, JSX styled blocks, conditional rendering, and `.map()` iterations are all processed before the Markdown engine — so they render as real content, not raw text.
+
+```mdx
+export const features = ['Mermaid', 'KaTeX', 'Marp', 'Shiki']
+
+The year is {new Date().getFullYear()} and {1 + 2 + 3} is six.
+
+<div style={{padding: '16px', background: '#f0f4ff', borderRadius: '8px'}}>
+  <strong>Styled JSX</strong> blocks render as native HTML.
+</div>
+
+{features.map((f, i) => (
+  <tr key={i}><td>{i + 1}</td><td>{f}</td></tr>
+))}
+
+export const showAdvanced = true
+{showAdvanced && (<div>Conditionally rendered content.</div>)}
+```
+
+Supported: `export const/let/var`, inline `{expressions}`, `style={{...}}` / `className` conversion, `.map()` iterations, `&&` / ternary conditionals, and multi-line JSX blocks. Code blocks, KaTeX math, Mermaid diagrams, and Recharts charts inside `.mdx` files are all preserved and rendered normally.
+
 ### Math
 
 KaTeX (default) or MathJax for rendering LaTeX math expressions:
@@ -239,6 +262,24 @@ Right-click in the preview and select **"Copy for Lark (飞书)"** to copy conte
 - Diagrams converted to PNG images for better compatibility
 - Tables, blockquotes, and task lists properly styled
 - All formatting preserved for seamless paste
+
+### Obsidian Compatibility
+
+Native support for Obsidian-flavored Markdown syntax:
+
+- **Highlights** — `==highlighted text==` renders as <mark>highlighted text</mark>
+- **Comments** — `%%hidden comment%%` stripped from rendered output
+- **Callouts** — `> [!note]`, `> [!tip]`, `> [!warning]` and 15 styled callout types with icons (note, info, tip, success, warning, caution, important, danger, failure, question, bug, example, quote, abstract, todo)
+- **Image Embeds** — `![[image.png]]` Obsidian-style image embedding with optional alt text `![[image.png|alt text]]`
+- **Heading Anchors** — `[[page#heading]]` wiki link anchors with automatic slug generation
+- **Custom Heading IDs** — `## My Heading {#custom-id}` for custom anchor targets
+
+```markdown
+> [!tip] Pro Tip
+> Callouts support **markdown** formatting inside.
+
+==This is highlighted== and %%this is hidden%%.
+```
 
 ### Additional Features
 

@@ -93,6 +93,29 @@ Bob --> Alice: Hi
 - **Viz/DOT** —— GraphViz 图表（客户端渲染）
 - **Vega / Vega-Lite** —— 数据可视化
 
+### MDX 支持
+
+`.mdx` 文件支持完整的 JSX 表达式求值和渲染。内联表达式、导出变量、JSX 样式块、条件渲染和 `.map()` 迭代在 Markdown 引擎处理之前完成 —— 因此它们渲染为真实内容，而不是原始文本。
+
+```mdx
+export const features = ['Mermaid', 'KaTeX', 'Marp', 'Shiki']
+
+当前年份是 {new Date().getFullYear()}，{1 + 2 + 3} 等于六。
+
+<div style={{padding: '16px', background: '#f0f4ff', borderRadius: '8px'}}>
+  <strong>带样式的 JSX</strong> 块渲染为原生 HTML。
+</div>
+
+{features.map((f, i) => (
+  <tr key={i}><td>{i + 1}</td><td>{f}</td></tr>
+))}
+
+export const showAdvanced = true
+{showAdvanced && (<div>条件渲染的内容。</div>)}
+```
+
+支持：`export const/let/var`、内联 `{表达式}`、`style={{...}}` / `className` 转换、`.map()` 迭代、`&&` / 三元条件渲染、多行 JSX 块。`.mdx` 文件中的代码块、KaTeX 数学公式、Mermaid 图表和 Recharts 图表均正常保留和渲染。
+
 ### 数学公式
 
 使用 KaTeX（默认）或 MathJax 渲染 LaTeX 数学表达式：
@@ -239,6 +262,24 @@ print(f"Pi = {math.pi:.10f}")
 - 图表转换为 PNG 图片，兼容性更好
 - 表格、引用块、任务列表保持正确样式
 - 所有格式完整保留，粘贴即用
+
+### Obsidian 兼容
+
+原生支持 Obsidian 风格的 Markdown 语法：
+
+- **高亮** —— `==高亮文本==` 渲染为 <mark>高亮文本</mark>
+- **注释** —— `%%隐藏注释%%` 从渲染输出中移除
+- **Callout 提示框** —— `> [!note]`、`> [!tip]`、`> [!warning]` 等 15 种带图标的样式化提示框类型（note、info、tip、success、warning、caution、important、danger、failure、question、bug、example、quote、abstract、todo）
+- **图片嵌入** —— `![[image.png]]` Obsidian 风格的图片嵌入，支持可选的替代文本 `![[image.png|替代文本]]`
+- **标题锚点** —— `[[page#heading]]` Wiki 链接锚点，自动生成 slug
+- **自定义标题 ID** —— `## 我的标题 {#custom-id}` 用于自定义锚点目标
+
+```markdown
+> [!tip] 小贴士
+> Callout 内部支持 **Markdown** 格式。
+
+==这是高亮文本== 而 %%这是隐藏注释%%。
+```
 
 ### 其他功能
 

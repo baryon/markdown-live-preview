@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "0.9.4",
+  "version": "1.0.0",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -13,7 +13,9 @@
     "preview",
     "mermaid",
     "katex",
-    "marp"
+    "marp",
+    "obsidian",
+    "mdx"
   ],
   "galleryBanner": {
     "color": "#1e1e1e",

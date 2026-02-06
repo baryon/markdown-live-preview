@@ -93,6 +93,29 @@ Bob --> Alice: Hi
 - **Viz/DOT** —— GraphViz ダイアグラム（クライアントサイド）
 - **Vega / Vega-Lite** —— データビジュアライゼーション
 
+### MDX サポート
+
+`.mdx` ファイルでは、JSX 式の評価とレンダリングを完全にサポートしています。インライン式、エクスポート変数、JSX スタイルブロック、条件レンダリング、`.map()` イテレーションはすべて Markdown エンジンの処理前に実行され、生のテキストではなく実際のコンテンツとしてレンダリングされます。
+
+```mdx
+export const features = ['Mermaid', 'KaTeX', 'Marp', 'Shiki']
+
+今年は {new Date().getFullYear()} 年で、{1 + 2 + 3} は 6 です。
+
+<div style={{padding: '16px', background: '#f0f4ff', borderRadius: '8px'}}>
+  <strong>スタイル付き JSX</strong> ブロックはネイティブ HTML としてレンダリングされます。
+</div>
+
+{features.map((f, i) => (
+  <tr key={i}><td>{i + 1}</td><td>{f}</td></tr>
+))}
+
+export const showAdvanced = true
+{showAdvanced && (<div>条件付きでレンダリングされるコンテンツ。</div>)}
+```
+
+サポート：`export const/let/var`、インライン `{式}`、`style={{...}}` / `className` 変換、`.map()` イテレーション、`&&` / 三項条件レンダリング、複数行 JSX ブロック。`.mdx` ファイル内のコードブロック、KaTeX 数式、Mermaid ダイアグラム、Recharts チャートはすべて正常に保持・レンダリングされます。
+
 ### 数式
 
 KaTeX（デフォルト）または MathJax で LaTeX 数式をレンダリング：
@@ -239,6 +262,24 @@ Python、JavaScript/TypeScript、Go、Rust、C/C++、Ruby、Bash、R、LaTeX を
 - ダイアグラムは互換性向上のため PNG 画像に変換
 - テーブル、引用ブロック、タスクリストは適切にスタイル設定
 - すべての書式が保持され、シームレスに貼り付け可能
+
+### Obsidian 互換性
+
+Obsidian フレーバーの Markdown 構文をネイティブサポート：
+
+- **ハイライト** —— `==ハイライトテキスト==` が <mark>ハイライトテキスト</mark> としてレンダリング
+- **コメント** —— `%%非表示コメント%%` はレンダリング出力から除去
+- **コールアウト** —— `> [!note]`、`> [!tip]`、`> [!warning]` および 15 種類のスタイル付きコールアウト（note、info、tip、success、warning、caution、important、danger、failure、question、bug、example、quote、abstract、todo）
+- **画像埋め込み** —— `![[image.png]]` Obsidian スタイルの画像埋め込み（オプションの代替テキスト `![[image.png|代替テキスト]]` 対応）
+- **見出しアンカー** —— `[[page#heading]]` Wiki リンクアンカー（自動スラグ生成）
+- **カスタム見出し ID** —— `## 見出し {#custom-id}` カスタムアンカーターゲット
+
+```markdown
+> [!tip] プロのヒント
+> コールアウト内では **Markdown** 書式がサポートされています。
+
+==これはハイライト== そして %%これは非表示%%。
+```
 
 ### その他の機能
 
