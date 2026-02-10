@@ -234,9 +234,19 @@ Python、JavaScript/TypeScript、Go、Rust、C/C++、Ruby、Bash、R、LaTeX を
 
 ### プレビューテーマ
 
-16 のプレビューテーマ：`github-light`、`github-dark`、`one-dark`、`one-light`、`solarized-dark`、`solarized-light`、`atom-dark`、`atom-light`、`atom-material`、`gothic`、`medium`、`monokai`、`newsprint`、`night`、`vue`、`none`。
+13 種の美しいプレビューテーマ。各テーマにライト/ダーク両バリアントを搭載。右クリックメニューから即座に切替可能：
 
-カラースキームは選択したテーマ、システム設定、またはエディタのライト/ダークモードに追従可能。
+| ライト系 | ダーク系 |
+|----------|----------|
+| **GitHub** — クラシックなGitHubスタイル（デフォルト） | **Dracula** — パープル/シアンアクセント |
+| **Obsidian** — パープルアクセント、Obsidianノート風 | **Nord** — 北極ブルーパレット |
+| **Vue** — グリーンアクセント、Vue.jsドキュメント風 | **One Dark** — Atomエディタカラー |
+| **Lark** — クリーンブルー、飛書/Larkドキュメント風 | **Tokyo Night** — ソフトパープル/ラベンダー |
+| **Smartblue** — ビビッドブルーアクセント | **Monokai** — クラシックダークエディタ |
+| **Medium** — セリフ体の読書体験 | **Solarized** — プレシジョンカラー |
+| **Gothic** — ミニマルでエレガント | |
+
+カラースキーム（ライト/ダーク/システム追従）はテーマとは独立に、右クリックメニューまたはVS Code設定から切替可能。
 
 ### クイックアクション（ホバーパネル）
 
@@ -320,7 +330,7 @@ Obsidian フレーバーの Markdown 構文をネイティブサポート：
 | 設定 | デフォルト | 説明 |
 |------|----------|------|
 | `markdownOpenMode` | `side-by-side` | Markdown ファイルを開く際のデフォルトモード |
-| `previewTheme` | `github-light.css` | プレビューテーマ |
+| `previewTheme` | `github` | プレビューテーマ（13種：github, obsidian, vue, lark, smartblue, medium, gothic, dracula, nord, one-dark, tokyo-night, monokai, solarized） |
 | `codeBlockTheme` | `auto` | シンタックスハイライトテーマ |
 | `mermaidTheme` | `github-light` | Mermaid ダイアグラムテーマ |
 | `mathRenderingOption` | `KaTeX` | 数式レンダリングエンジン |

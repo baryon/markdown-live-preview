@@ -32,22 +32,19 @@ export enum FrontMatterRenderingOption {
 
 // Preview theme type
 export type PreviewTheme =
-  | 'atom-dark.css'
-  | 'atom-light.css'
-  | 'atom-material.css'
-  | 'github-dark.css'
-  | 'github-light.css'
-  | 'gothic.css'
-  | 'medium.css'
-  | 'monokai.css'
-  | 'newsprint.css'
-  | 'night.css'
-  | 'none.css'
-  | 'one-dark.css'
-  | 'one-light.css'
-  | 'solarized-dark.css'
-  | 'solarized-light.css'
-  | 'vue.css';
+  | 'github'
+  | 'obsidian'
+  | 'vue'
+  | 'lark'
+  | 'smartblue'
+  | 'medium'
+  | 'gothic'
+  | 'dracula'
+  | 'nord'
+  | 'one-dark'
+  | 'tokyo-night'
+  | 'monokai'
+  | 'solarized';
 
 // Code block theme type (Shiki themes)
 export type CodeBlockTheme =

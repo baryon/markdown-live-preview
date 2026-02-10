@@ -234,9 +234,19 @@ print(f"Pi = {math.pi:.10f}")
 
 ### Preview Themes
 
-16 preview themes: `github-light`, `github-dark`, `one-dark`, `one-light`, `solarized-dark`, `solarized-light`, `atom-dark`, `atom-light`, `atom-material`, `gothic`, `medium`, `monokai`, `newsprint`, `night`, `vue`, and `none`.
+13 beautiful preview themes, each with light and dark variants. Switch themes instantly via the right-click context menu:
 
-Color scheme can follow the selected theme, the system setting, or the editor's light/dark mode.
+| Light-first | Dark-first |
+|-------------|------------|
+| **GitHub** — Classic GitHub style (default) | **Dracula** — Purple/cyan accents |
+| **Obsidian** — Purple accent, inspired by Obsidian notes | **Nord** — Arctic, cool blue palette |
+| **Vue** — Green accent, inspired by Vue.js docs | **One Dark** — Atom editor colors |
+| **Lark** — Clean blue, inspired by Feishu/Lark docs | **Tokyo Night** — Soft purple/lavender |
+| **Smartblue** — Vivid blue accent | **Monokai** — Classic dark editor |
+| **Medium** — Warm serif reading experience | **Solarized** — Precision colors |
+| **Gothic** — Minimal and elegant | |
+
+Color scheme (light/dark/system) can be toggled independently from the theme via the context menu or VS Code settings.
 
 ### Quick Actions (Hover Panels)
 
@@ -320,7 +330,7 @@ All settings are under the `markdown-live-preview` namespace. Key options:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `markdownOpenMode` | `side-by-side` | Default mode when opening Markdown files |
-| `previewTheme` | `github-light.css` | Preview theme |
+| `previewTheme` | `github` | Preview theme (13 themes: github, obsidian, vue, lark, smartblue, medium, gothic, dracula, nord, one-dark, tokyo-night, monokai, solarized) |
 | `codeBlockTheme` | `auto` | Syntax highlighting theme |
 | `mermaidTheme` | `github-light` | Mermaid diagram theme |
 | `mathRenderingOption` | `KaTeX` | Math rendering engine |

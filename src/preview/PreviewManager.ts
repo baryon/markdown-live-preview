@@ -411,34 +411,11 @@ export class PreviewManager {
    */
   getPreviewTheme(
     baseTheme: PreviewTheme,
-    colorScheme: PreviewColorScheme,
+    _colorScheme: PreviewColorScheme,
   ): PreviewTheme {
-    if (colorScheme === PreviewColorScheme.selectedPreviewTheme) {
-      return baseTheme;
-    }
-
-    const isDark =
-      colorScheme === PreviewColorScheme.systemColorScheme
-        ? this.systemColorScheme === 'dark'
-        : this.getEditorColorScheme() === 'dark';
-
-    // Map themes to their light/dark variants
-    const themeMap: Record<
-      string,
-      { light: PreviewTheme; dark: PreviewTheme }
-    > = {
-      atom: { light: 'atom-light.css', dark: 'atom-dark.css' },
-      github: { light: 'github-light.css', dark: 'github-dark.css' },
-      one: { light: 'one-light.css', dark: 'one-dark.css' },
-      solarized: { light: 'solarized-light.css', dark: 'solarized-dark.css' },
-    };
-
-    for (const [key, variants] of Object.entries(themeMap)) {
-      if (baseTheme.includes(key)) {
-        return isDark ? variants.dark : variants.light;
-      }
-    }
-
+    // Each theme now includes both light and dark variants,
+    // controlled by the data-theme attribute in the preview.
+    // The theme name stays the same regardless of color scheme.
     return baseTheme;
   }
 

@@ -196,10 +196,24 @@ export class MarkdownEngine {
   ): Promise<string> {
     const { inputString, config: templateConfig } = options;
 
-    // Detect presentation mode from front matter — render via Marp
-    if (MarpClass && this.isPresentationMarkdown(inputString)) {
+    // Detect presentation mode from front matter
+    if (this.isPresentationMarkdown(inputString)) {
       this.isPreviewInPresentationMode = true;
-      return this.generateMarpTemplate(inputString, templateConfig);
+
+      // .mdx presentations use Reveal.js (supports JSX, MDX expressions, diagrams)
+      const sourceExt = templateConfig?.sourceUri
+        ? path
+            .extname(vscode.Uri.parse(templateConfig.sourceUri).fsPath)
+            .toLowerCase()
+        : '';
+      if (sourceExt === '.mdx') {
+        return this.generateRevealTemplate(inputString, templateConfig);
+      }
+
+      // .md presentations use Marp (backward-compatible)
+      if (MarpClass) {
+        return this.generateMarpTemplate(inputString, templateConfig);
+      }
     }
 
     // Parse the markdown
@@ -232,7 +246,7 @@ export class MarkdownEngine {
     ${this.getBaseCSS()}
   </style>
 </head>
-<body class="vscode-body ${yamlConfig.class || ''}" data-theme="system" data-has-toc="${hasTOC}">
+<body class="vscode-body ${yamlConfig.class || ''}" data-theme="system" data-preview-theme="${this.config.preview.theme || 'github'}" data-has-toc="${hasTOC}">
   <div id="toc-container" class="hidden">
     ${frontMatterForTOC}
     ${tocHTML}
@@ -1322,6 +1336,704 @@ export class MarkdownEngine {
   }
 
   /**
+   * Split markdown into slides for Reveal.js presentation.
+   * Splits on `---` (horizontal rule) while protecting fenced code blocks.
+   * Parses `<!-- .slide: key="value" -->` directives into section attributes.
+   */
+  private splitMarkdownIntoSlides(markdown: string): {
+    frontMatter: Record<string, unknown> | null;
+    slides: Array<{ content: string; directives: string }>;
+  } {
+    const { frontMatter, content } = this.extractFrontMatter(markdown);
+
+    // Protect fenced code blocks from being split by ---
+    const codeBlockPlaceholders: string[] = [];
+    const protectedContent = content.replace(
+      /^(`{3,})[^\n]*\n[\s\S]*?\n\1\s*$/gm,
+      (match) => {
+        const idx = codeBlockPlaceholders.length;
+        codeBlockPlaceholders.push(match);
+        return `%%CODE_BLOCK_${idx}%%`;
+      },
+    );
+
+    // Split by --- on its own line
+    const rawSlides = protectedContent.split(/^---\s*$/m);
+
+    // Restore code blocks and parse directives
+    const slides: Array<{ content: string; directives: string }> = [];
+    for (const raw of rawSlides) {
+      let slideContent = raw;
+      // Restore placeholders
+      for (let i = 0; i < codeBlockPlaceholders.length; i++) {
+        slideContent = slideContent.replace(
+          `%%CODE_BLOCK_${i}%%`,
+          codeBlockPlaceholders[i],
+        );
+      }
+
+      slideContent = slideContent.trim();
+      if (!slideContent) continue;
+
+      // Parse <!-- .slide: key="value" key2=value2 --> directives
+      let directives = '';
+      slideContent = slideContent.replace(
+        /<!--\s*\.slide:\s*([\s\S]*?)\s*-->/g,
+        (_match, attrs: string) => {
+          // Convert key="value" and key=value pairs to HTML attributes
+          directives = attrs
+            .replace(/(\w[\w-]*)=(?:"([^"]*)"|(\S+))/g, '$1="$2$3"')
+            .trim();
+          return '';
+        },
+      );
+
+      slides.push({ content: slideContent.trim(), directives });
+    }
+
+    return { frontMatter, slides };
+  }
+
+  /**
+   * Generate a Reveal.js presentation template for .mdx files.
+   * Each slide is processed independently through the full MDX pipeline:
+   * imports → MDX → markdown-it → image paths → callouts → KaTeX → Shiki.
+   */
+  private async generateRevealTemplate(
+    markdown: string,
+    templateConfig?: HTMLTemplateOptions['config'],
+  ): Promise<string> {
+    const jsdelivr = this.config.misc.jsdelivrCdnHost || 'cdn.jsdelivr.net';
+    const { frontMatter, slides } = this.splitMarkdownIntoSlides(markdown);
+
+    // Valid Reveal.js 5.x theme names
+    const validRevealThemes = new Set([
+      'beige', 'black', 'blood', 'dracula', 'league',
+      'moon', 'night', 'serif', 'simple', 'sky',
+      'solarized', 'white',
+    ]);
+
+    // Read presentation config from front matter
+    const fm = frontMatter || {};
+    const requestedTheme =
+      (fm.theme as string) ||
+      this.config.theme.revealjs.replace(/\.css$/, '') ||
+      'white';
+    // Validate theme — fall back to 'white' if not a valid Reveal.js theme
+    const revealTheme = validRevealThemes.has(requestedTheme)
+      ? requestedTheme
+      : 'white';
+    const transition = (fm.transition as string) || 'slide';
+    const controls = fm.controls !== false;
+    const progress = fm.progress !== false;
+    const center = fm.center !== false;
+    const slideNumber = !!fm.slideNumber;
+
+    // Get source file path for import resolution and image paths
+    const sourceUri = templateConfig?.sourceUri || '';
+    let sourceFilePath = '';
+    let sourceDir = '';
+    if (sourceUri) {
+      try {
+        sourceFilePath = vscode.Uri.parse(sourceUri).fsPath;
+        sourceDir = path.dirname(sourceFilePath);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Process each slide through the full pipeline
+    const slideHtmlParts: string[] = [];
+    for (const slide of slides) {
+      let slideContent = slide.content;
+
+      // 1. Process @import directives
+      if (sourceFilePath) {
+        try {
+          slideContent = await this.processImports(
+            slideContent,
+            sourceFilePath,
+          );
+        } catch {
+          // continue with unprocessed content
+        }
+      }
+
+      // 2. Process MDX content (JSX expressions, exports)
+      try {
+        const mdxProcessor = new MdxProcessor();
+        const mdxResult = mdxProcessor.process(slideContent);
+        slideContent = mdxResult.content;
+      } catch {
+        // continue with unprocessed content
+      }
+
+      // 3. Render markdown to HTML via markdown-it
+      let slideHtml = this.parser.render(slideContent);
+
+      // 4. Resolve image paths to data URIs
+      if (sourceDir) {
+        try {
+          slideHtml = this.resolveImagePaths(slideHtml, sourceDir);
+        } catch {
+          // continue
+        }
+      }
+
+      // 5. Process Obsidian-style callouts
+      slideHtml = this.processCallouts(slideHtml);
+
+      // 6. Process KaTeX math
+      slideHtml = this.katexRenderer.processMathInContent(slideHtml);
+
+      // 7. Process code blocks with Shiki syntax highlighting
+      slideHtml = await this.processCodeBlocks(slideHtml);
+
+      // 8. Store recharts/vega source in data-source for Reveal.js compatibility.
+      // Reveal.js re-processes slide DOM during init, which clears <script> textContent.
+      // The data-source attribute survives DOM manipulation.
+      slideHtml = slideHtml.replace(
+        /<div class="recharts"([^>]*)>\s*<script type="text\/recharts">([\s\S]*?)<\/script>/g,
+        (_match, attrs: string, source: string) => {
+          const escaped = this.escapeHtml(source);
+          return `<div class="recharts"${attrs} data-source="${escaped}"><script type="text/recharts">${source}</script>`;
+        },
+      );
+
+      // Build <section> with optional directives
+      const sectionAttrs = slide.directives
+        ? ` ${slide.directives}`
+        : '';
+      slideHtmlParts.push(
+        `        <section${sectionAttrs}>\n${slideHtml}\n        </section>`,
+      );
+    }
+
+    const slidesHtml = slideHtmlParts.join('\n');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:;">
+  <title>Reveal.js Presentation</title>
+  <link rel="stylesheet" href="https://${jsdelivr}/npm/reveal.js@5/dist/reset.css">
+  <link rel="stylesheet" href="https://${jsdelivr}/npm/reveal.js@5/dist/reveal.css">
+  <link rel="stylesheet" href="https://${jsdelivr}/npm/reveal.js@5/dist/theme/${revealTheme}.css">
+  <link rel="stylesheet" href="${KatexRenderer.getCssUrl()}">
+  <style>
+    ${KatexRenderer.getCss()}
+
+    /* ══════════════════════════════════════
+       Card mode (default) — slides as cards
+       ══════════════════════════════════════ */
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not(.play-mode) { background: #1e1e1e; }
+    }
+
+    /* In card mode, disable Reveal.js layout — show slides as stacked cards */
+    body:not(.play-mode) .reveal {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+    }
+    body:not(.play-mode) .reveal .slides {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      pointer-events: auto;
+      perspective: none;
+      display: block;
+    }
+    body:not(.play-mode) .reveal .slides section {
+      position: static !important;
+      display: block !important;
+      width: 800px;
+      min-height: 450px;
+      margin: 24px auto;
+      padding: 48px 56px;
+      box-sizing: border-box;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      transform: none !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      left: auto !important;
+      top: auto !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not(.play-mode) .reveal .slides section {
+        background: #2d2d2d;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+    }
+    /* Hide Reveal.js chrome in card mode */
+    body:not(.play-mode) .reveal .controls,
+    body:not(.play-mode) .reveal .progress,
+    body:not(.play-mode) .reveal .slide-number,
+    body:not(.play-mode) .reveal .backgrounds {
+      display: none !important;
+    }
+    /* Play button */
+    #play-btn {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    #play-btn:hover { opacity: 1; }
+    body.play-mode #play-btn { display: none; }
+
+    /* Navigation bar in play mode */
+    #play-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1001;
+      height: 40px;
+      background: rgba(0,0,0,0.35);
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 0 16px;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    body.play-mode #play-nav { display: flex; }
+    body.play-mode.nav-visible #play-nav { opacity: 1; }
+    #play-nav button {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.7);
+      font-size: 16px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    #play-nav button:hover { color: #fff; }
+    #play-nav button#nav-exit { font-size: 13px; }
+    #play-nav .slide-indicator {
+      color: rgba(255,255,255,0.6);
+      font: 13px/1 sans-serif;
+      min-width: 60px;
+      text-align: center;
+      user-select: none;
+    }
+
+    /* ══════════════════════════════════════════
+       Play mode — Reveal.js fullscreen
+       Reveal.js theme CSS handles all styling.
+       Only override custom elements here.
+       ══════════════════════════════════════════ */
+    body.play-mode {
+      overflow: hidden;
+    }
+    body.play-mode .reveal {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+    /* Don't uppercase headings (Reveal.js white theme default) */
+    body.play-mode .reveal section {
+      text-align: left;
+    }
+    body.play-mode .reveal section h1,
+    body.play-mode .reveal section h2,
+    body.play-mode .reveal section h3,
+    body.play-mode .reveal section h4 {
+      text-transform: none;
+    }
+    /* Hide Reveal.js built-in controls — we use our own nav bar */
+    body.play-mode .reveal .controls {
+      display: none !important;
+    }
+    /* Custom element overrides for play mode */
+    body.play-mode .reveal .diagram-controls,
+    body.play-mode .reveal .math-controls,
+    body.play-mode .reveal .code-copy-btn,
+    body.play-mode .reveal .code-block-container .code-header {
+      display: none !important;
+    }
+    body.play-mode .reveal section .diagram-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: visible;
+      margin: 0.4em 0;
+    }
+    body.play-mode .reveal section .mermaid svg,
+    body.play-mode .reveal section .graphviz svg,
+    body.play-mode .reveal section .vega svg,
+    body.play-mode .reveal section .vega-lite svg {
+      max-width: 90%;
+      max-height: 50vh;
+      height: auto;
+    }
+    body.play-mode .reveal section .recharts {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0.4em auto;
+    }
+    body.play-mode .reveal section .recharts .recharts-wrapper {
+      overflow: visible !important;
+      margin: 0 auto;
+    }
+    body.play-mode .reveal section .recharts svg.recharts-surface {
+      overflow: visible;
+    }
+    body.play-mode .reveal section img {
+      max-height: 55vh;
+    }
+    body.play-mode .reveal section pre {
+      box-shadow: none;
+    }
+    body.play-mode .reveal section blockquote {
+      box-shadow: none;
+    }
+    body.play-mode .reveal section .callout {
+      text-align: left;
+    }
+
+    /* ═══════════════════════════════════
+       Card mode — Content styling
+       (Does NOT apply in play mode)
+       ═══════════════════════════════════ */
+
+    /* Typography */
+    body:not(.play-mode) .reveal section h1 {
+      font-size: 1.6em;
+      margin: 0 0 0.3em 0;
+      line-height: 1.2;
+    }
+    body:not(.play-mode) .reveal section h2 {
+      font-size: 1.1em;
+      margin: 0.4em 0 0.2em 0;
+      line-height: 1.3;
+      opacity: 0.7;
+    }
+    body:not(.play-mode) .reveal section h3 {
+      font-size: 0.95em;
+      margin: 0.3em 0 0.15em 0;
+    }
+    body:not(.play-mode) .reveal section p {
+      font-size: 0.7em;
+      line-height: 1.6;
+      margin: 0.2em 0;
+    }
+
+    /* Lists */
+    body:not(.play-mode) .reveal section ul,
+    body:not(.play-mode) .reveal section ol {
+      font-size: 0.7em;
+      line-height: 1.7;
+      margin: 0.2em 0;
+      padding-left: 1.3em;
+    }
+    body:not(.play-mode) .reveal section ul ul,
+    body:not(.play-mode) .reveal section ol ol {
+      font-size: 1em;
+      margin: 0;
+    }
+    body:not(.play-mode) .reveal section li {
+      margin-bottom: 0.1em;
+    }
+
+    /* Tables */
+    body:not(.play-mode) .reveal section table {
+      font-size: 0.6em;
+      border-collapse: collapse;
+      width: auto;
+      margin: 0.4em auto;
+    }
+    body:not(.play-mode) .reveal section table th {
+      background: #f0f0f0;
+      font-weight: 600;
+      padding: 6px 14px;
+      border: 1px solid #ddd;
+    }
+    body:not(.play-mode) .reveal section table td {
+      padding: 5px 14px;
+      border: 1px solid #ddd;
+    }
+    body:not(.play-mode) .reveal section table tr:nth-child(even) {
+      background: #fafafa;
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not(.play-mode) .reveal section table th { background: #3a3a3a; border-color: #555; }
+      body:not(.play-mode) .reveal section table td { border-color: #555; }
+      body:not(.play-mode) .reveal section table tr:nth-child(even) { background: #333; }
+    }
+
+    /* Code */
+    body:not(.play-mode) .reveal section pre {
+      width: 100%;
+      box-shadow: none;
+      font-size: 0.5em;
+      border-radius: 6px;
+      margin: 0.3em 0;
+    }
+    body:not(.play-mode) .reveal section pre code {
+      max-height: 400px;
+      padding: 14px;
+      line-height: 1.5;
+    }
+    body:not(.play-mode) .reveal section code {
+      font-size: 0.88em;
+    }
+
+    /* Blockquotes & callouts */
+    body:not(.play-mode) .reveal section blockquote {
+      font-size: 0.7em;
+      width: 90%;
+      padding: 10px 18px;
+      margin: 0.3em auto;
+      border-left: 4px solid #ccc;
+      background: rgba(0,0,0,0.03);
+      box-shadow: none;
+    }
+    body:not(.play-mode) .reveal section .callout {
+      text-align: left;
+      font-size: 0.65em;
+      border-radius: 6px;
+    }
+
+    /* Images */
+    body:not(.play-mode) .reveal section img {
+      max-width: 75%;
+      max-height: 45vh;
+      border-radius: 6px;
+      margin: 0.2em auto;
+      display: block;
+    }
+
+    /* KaTeX */
+    body:not(.play-mode) .reveal section .katex-display {
+      margin: 0.3em 0;
+      font-size: 0.8em;
+    }
+
+    /* Diagrams */
+    body:not(.play-mode) .reveal section .diagram-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: visible;
+      margin: 0.2em 0;
+    }
+    body:not(.play-mode) .reveal section .mermaid svg,
+    body:not(.play-mode) .reveal section .graphviz svg,
+    body:not(.play-mode) .reveal section .vega svg,
+    body:not(.play-mode) .reveal section .vega-lite svg {
+      max-width: 100%;
+      max-height: 50vh;
+      height: auto;
+    }
+    body:not(.play-mode) .reveal section .recharts {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0.2em auto;
+    }
+    body:not(.play-mode) .reveal section .recharts .recharts-wrapper {
+      overflow: visible !important;
+      margin: 0 auto;
+    }
+    body:not(.play-mode) .reveal section .recharts svg.recharts-surface {
+      overflow: visible;
+    }
+    body:not(.play-mode) .reveal .slides section {
+      overflow: visible;
+    }
+
+    /* Hide controls in card mode */
+    body:not(.play-mode) .reveal .diagram-controls,
+    body:not(.play-mode) .reveal .math-controls,
+    body:not(.play-mode) .reveal .code-copy-btn,
+    body:not(.play-mode) .reveal .code-block-container .code-header {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <button id="play-btn" title="Play presentation">&#9654; Play</button>
+  <div id="play-nav">
+    <button id="nav-exit" title="Exit (Esc)">&#10005;</button>
+    <button id="nav-prev" title="Previous slide">&#9664;</button>
+    <span class="slide-indicator" id="slide-counter"></span>
+    <button id="nav-next" title="Next slide">&#9654;</button>
+  </div>
+  <div class="reveal">
+    <div class="slides">
+${slidesHtml}
+    </div>
+  </div>
+  ${this.generateDiagramScripts()}
+  <script src="https://${jsdelivr}/npm/reveal.js@5/dist/reveal.js"></script>
+  <script src="https://${jsdelivr}/npm/reveal.js@5/plugin/notes/notes.js"></script>
+  <script>
+    (function() {
+      // VS Code API
+      var vscode = null;
+      try { vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null; } catch(e) {}
+      window._vscodeApi = vscode;
+      window._sourceUri = '${sourceUri}';
+
+      if (vscode) {
+        var sc = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        vscode.postMessage({ command: 'webviewFinishLoading', args: [{ uri: window._sourceUri, systemColorScheme: sc }] });
+      }
+      window.addEventListener('message', function(ev) {
+        if (ev.data.command === 'refreshPreview' && vscode)
+          vscode.postMessage({ command: 'refreshPreview', args: [window._sourceUri] });
+      });
+
+      var revealReady = false;
+      var currentSlide = 0;
+      var counter = document.getElementById('slide-counter');
+      var sections = document.querySelectorAll('.reveal .slides > section');
+      var totalSlides = sections.length;
+
+      function enterPlay() {
+        if (!totalSlides) return;
+        document.body.classList.add('play-mode');
+
+        if (!revealReady) {
+          Reveal.initialize({
+            controls: false,
+            progress: ${progress},
+            center: ${center},
+            slideNumber: ${slideNumber},
+            transition: '${transition}',
+            embedded: false,
+            plugins: [typeof RevealNotes !== 'undefined' ? RevealNotes : null].filter(Boolean)
+          }).then(function() {
+            revealReady = true;
+            Reveal.slide(0);
+            updateCounter();
+            // Render diagrams
+            if (window.renderAllDiagrams) window.renderAllDiagrams();
+
+            Reveal.on('slidechanged', function(ev) {
+              currentSlide = ev.indexh || 0;
+              updateCounter();
+              if (window.renderAllDiagrams) window.renderAllDiagrams();
+            });
+          });
+        } else {
+          Reveal.slide(currentSlide);
+          Reveal.layout();
+          updateCounter();
+        }
+      }
+
+      function exitPlay() {
+        document.body.classList.remove('play-mode');
+      }
+
+      function updateCounter() {
+        if (counter) counter.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+      }
+
+      function isPlaying() { return document.body.classList.contains('play-mode'); }
+
+      document.getElementById('play-btn').addEventListener('click', enterPlay);
+      document.getElementById('nav-prev').addEventListener('click', function() {
+        if (revealReady) Reveal.prev();
+      });
+      document.getElementById('nav-next').addEventListener('click', function() {
+        if (revealReady) Reveal.next();
+      });
+      document.getElementById('nav-exit').addEventListener('click', exitPlay);
+
+      // Auto-hide nav bar
+      var navTimer;
+      document.addEventListener('mousemove', function() {
+        if (!isPlaying()) return;
+        document.body.classList.add('nav-visible');
+        clearTimeout(navTimer);
+        navTimer = setTimeout(function() { document.body.classList.remove('nav-visible'); }, 2000);
+      });
+
+      // Keyboard navigation
+      document.addEventListener('keydown', function(e) {
+        if (!isPlaying()) return;
+        switch (e.key) {
+          case 'Escape':       exitPlay(); break;
+          case 'ArrowRight':
+          case 'ArrowDown':
+          case ' ':
+          case 'PageDown':     e.preventDefault(); if (revealReady) Reveal.next(); break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+          case 'PageUp':       e.preventDefault(); if (revealReady) Reveal.prev(); break;
+          case 'Home':         e.preventDefault(); if (revealReady) Reveal.slide(0); break;
+          case 'End':          e.preventDefault(); if (revealReady) Reveal.slide(totalSlides - 1); break;
+        }
+      });
+
+      // Render diagrams in card mode on load
+      window.addEventListener('load', function() {
+        if (window.renderAllDiagrams) window.renderAllDiagrams();
+      });
+    })();
+  </script>
+</body>
+</html>`;
+  }
+
+  /**
+   * Convert ```recharts fenced code blocks to raw HTML divs.
+   * Used for Marp pre-processing since Marp bypasses the markdown-it pipeline.
+   * Returns { content, hasRecharts }.
+   */
+  private preprocessRechartsBlocks(markdown: string): {
+    content: string;
+    hasRecharts: boolean;
+  } {
+    let counter = 0;
+    const processed = markdown.replace(
+      /^```recharts\s*\n([\s\S]*?)^```\s*$/gm,
+      (_match, chartContent: string) => {
+        const id = `recharts-${counter++}`;
+        return (
+          `<div class="recharts" id="${id}">` +
+          `<script type="text/recharts">${chartContent}</script>` +
+          `<div class="recharts-loading" style="padding:20px;text-align:center;color:#666;">` +
+          `<span>Loading Recharts...</span>` +
+          `</div>` +
+          `</div>`
+        );
+      },
+    );
+    return { content: processed, hasRecharts: counter > 0 };
+  }
+
+  /**
    * Render a Marp presentation using @marp-team/marp-core.
    * Marp Core handles all directives (theme, paginate, headingDivider, style,
    * backgroundColor, etc.) natively via its own markdown-it pipeline.
@@ -1345,6 +2057,12 @@ export class MarkdownEngine {
         markdown.substring(fmMatch[0].length);
     }
 
+    // Pre-process recharts blocks to raw HTML before Marp rendering.
+    // Marp has html:true so raw HTML divs pass through to slides.
+    const { content: rechartsProcessed, hasRecharts } =
+      this.preprocessRechartsBlocks(marpInput);
+    marpInput = rechartsProcessed;
+
     const marp = new MarpClass!({
       html: true,
       math: 'katex',
@@ -1354,6 +2072,208 @@ export class MarkdownEngine {
     });
 
     const { html, css } = marp.render(marpInput);
+
+    // Conditional recharts CSS
+    const rechartsCSS = hasRecharts
+      ? `
+    /* Recharts containers */
+    .recharts {
+      display: flex;
+      justify-content: center;
+      min-height: 100px;
+      background: #f9f9f9;
+      border: 1px dashed #ddd;
+      border-radius: 4px;
+    }
+    .recharts[data-rendered="true"] {
+      background: transparent;
+      border: none;
+    }
+    .recharts svg {
+      max-width: 100%;
+      height: auto;
+    }`
+      : '';
+
+    // Conditional recharts CDN scripts
+    const rechartsCDN = hasRecharts
+      ? `
+  <!-- React, ReactDOM, react-is for Recharts v3 -->
+  <script src="https://${jsdelivr}/npm/react@18/umd/react.production.min.js"></script>
+  <script src="https://${jsdelivr}/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://${jsdelivr}/npm/react-is@18/umd/react-is.production.min.js"></script>
+  <!-- Recharts v3 -->
+  <script src="https://${jsdelivr}/npm/recharts@3/umd/Recharts.js"></script>`
+      : '';
+
+    // Conditional recharts render script
+    const rechartsScript = hasRecharts
+      ? `
+    // --- Recharts rendering ---
+    window.renderRecharts = function() {
+      var elements = document.querySelectorAll('.recharts:not([data-rendered])');
+      if (elements.length === 0) return;
+      var errors = [];
+      if (typeof React === 'undefined') errors.push('React not loaded');
+      if (typeof ReactDOM === 'undefined') errors.push('ReactDOM not loaded');
+      if (typeof Recharts === 'undefined') errors.push('Recharts not loaded');
+      if (errors.length > 0) {
+        elements.forEach(function(el) {
+          el.innerHTML = '<div style="color:#c00;padding:12px;background:#fff0f0;border:1px solid #fcc;border-radius:4px;font-size:12px;"><strong>Recharts Error:</strong><br>' + errors.join('<br>') + '<br><br><em>Scripts may still be loading. Try refreshing.</em></div>';
+          el.setAttribute('data-rendered', 'true');
+        });
+        return;
+      }
+      var RC = Recharts;
+      document.querySelectorAll('.recharts:not([data-rendered])').forEach(function(el) {
+        try {
+          var scriptEl = el.querySelector('script[type="text/recharts"]');
+          var source = scriptEl ? scriptEl.textContent : '';
+          if (!source || !source.trim()) {
+            el.innerHTML = '<div style="color:#999;padding:16px;text-align:center;">No chart data</div>';
+            el.setAttribute('data-rendered', 'true');
+            return;
+          }
+          el.setAttribute('data-source', source);
+          if (scriptEl) scriptEl.style.display = 'none';
+          var loadingEl = el.querySelector('.recharts-loading');
+          if (loadingEl) loadingEl.style.display = 'none';
+          var chartType = '';
+          var typeMatch = source.match(/^\\s*<(LineChart|BarChart|PieChart|AreaChart|ComposedChart|ScatterChart|RadarChart)/);
+          if (typeMatch) {
+            chartType = typeMatch[1];
+          } else {
+            el.innerHTML = '<div style="color:#c00;padding:8px;">Unknown chart type</div>';
+            el.setAttribute('data-rendered', 'true');
+            return;
+          }
+          var width = 500, height = 300;
+          var sizeMatch = source.match(/width=\\{(\\d+)\\}/);
+          if (sizeMatch) width = parseInt(sizeMatch[1]);
+          sizeMatch = source.match(/height=\\{(\\d+)\\}/);
+          if (sizeMatch) height = parseInt(sizeMatch[1]);
+          var data = [];
+          var dataStart = source.indexOf('data={[');
+          if (dataStart !== -1) {
+            var bracketCount = 0;
+            var dataEnd = dataStart + 7;
+            for (var i = dataStart + 6; i < source.length; i++) {
+              if (source[i] === '[' || source[i] === '{') bracketCount++;
+              if (source[i] === ']' || source[i] === '}') bracketCount--;
+              if (bracketCount === 0) { dataEnd = i + 1; break; }
+            }
+            var dataStr = source.substring(dataStart + 6, dataEnd);
+            try { data = (new Function('return ' + dataStr))(); } catch(e) { console.warn('Data parse error:', e); }
+          }
+          var children = [];
+          if (source.indexOf('<CartesianGrid') !== -1) {
+            var dashMatch = source.match(/strokeDasharray="([^"]+)"/);
+            children.push(React.createElement(RC.CartesianGrid, { key: 'grid', strokeDasharray: dashMatch ? dashMatch[1] : '3 3' }));
+          }
+          if (source.indexOf('<XAxis') !== -1) {
+            var xKeyMatch = source.match(/<XAxis[^>]*dataKey="([^"]+)"/);
+            children.push(React.createElement(RC.XAxis, { key: 'xaxis', dataKey: xKeyMatch ? xKeyMatch[1] : undefined }));
+          }
+          if (source.indexOf('<YAxis') !== -1) {
+            children.push(React.createElement(RC.YAxis, { key: 'yaxis' }));
+          }
+          if (source.indexOf('<Tooltip') !== -1) {
+            children.push(React.createElement(RC.Tooltip, { key: 'tooltip' }));
+          }
+          if (source.indexOf('<Legend') !== -1) {
+            children.push(React.createElement(RC.Legend, { key: 'legend' }));
+          }
+          var lineMatches = source.match(/<Line[^/]*\\/>/g) || [];
+          lineMatches.forEach(function(lineStr, idx) {
+            var typeM = lineStr.match(/type="([^"]+)"/);
+            var keyM = lineStr.match(/dataKey="([^"]+)"/);
+            var strokeM = lineStr.match(/stroke="([^"]+)"/);
+            if (keyM) {
+              children.push(React.createElement(RC.Line, { key: 'line-' + idx, type: typeM ? typeM[1] : 'monotone', dataKey: keyM[1], stroke: strokeM ? strokeM[1] : '#8884d8' }));
+            }
+          });
+          var barMatches = source.match(/<Bar[^/]*\\/>/g) || [];
+          barMatches.forEach(function(barStr, idx) {
+            var keyM = barStr.match(/dataKey="([^"]+)"/);
+            var fillM = barStr.match(/fill="([^"]+)"/);
+            if (keyM) {
+              children.push(React.createElement(RC.Bar, { key: 'bar-' + idx, dataKey: keyM[1], fill: fillM ? fillM[1] : '#8884d8' }));
+            }
+          });
+          var areaMatches = source.match(/<Area[^/]*\\/>/g) || [];
+          areaMatches.forEach(function(areaStr, idx) {
+            var typeM = areaStr.match(/type="([^"]+)"/);
+            var keyM = areaStr.match(/dataKey="([^"]+)"/);
+            var stackM = areaStr.match(/stackId="([^"]+)"/);
+            var strokeM = areaStr.match(/stroke="([^"]+)"/);
+            var fillM = areaStr.match(/fill="([^"]+)"/);
+            if (keyM) {
+              children.push(React.createElement(RC.Area, { key: 'area-' + idx, type: typeM ? typeM[1] : 'monotone', dataKey: keyM[1], stackId: stackM ? stackM[1] : undefined, stroke: strokeM ? strokeM[1] : '#8884d8', fill: fillM ? fillM[1] : '#8884d8' }));
+            }
+          });
+          if (chartType === 'PieChart') {
+            var pieMatch = source.match(/<Pie[\\s\\n][\\s\\S]*?(?=\\/>|>)/);
+            if (pieMatch) {
+              var pieStr = pieMatch[0];
+              var pieData = [];
+              var pieSection = source.substring(source.indexOf('<Pie'));
+              var pdStart = pieSection.indexOf('data={[');
+              if (pdStart !== -1) {
+                var pdBracket = 0;
+                var pdEnd = pdStart + 7;
+                for (var pj = pdStart + 6; pj < pieSection.length; pj++) {
+                  if (pieSection[pj] === '[' || pieSection[pj] === '{') pdBracket++;
+                  if (pieSection[pj] === ']' || pieSection[pj] === '}') pdBracket--;
+                  if (pdBracket === 0) { pdEnd = pj + 1; break; }
+                }
+                var pieDataStr = pieSection.substring(pdStart + 6, pdEnd);
+                try { pieData = (new Function('return ' + pieDataStr))(); } catch(e) { console.warn('Pie data parse error:', e); }
+              }
+              var cxM = pieStr.match(/cx="([^"]+)"/);
+              var cyM = pieStr.match(/cy="([^"]+)"/);
+              var orM = pieStr.match(/outerRadius=\\{?(\\d+)\\}?/);
+              var fillM = pieStr.match(/fill="([^"]+)"/);
+              var dkM = pieStr.match(/dataKey="([^"]+)"/);
+              var hasLabel = pieStr.indexOf('label') !== -1;
+              children.push(React.createElement(RC.Pie, { key: 'pie', data: pieData, cx: cxM ? cxM[1] : '50%', cy: cyM ? cyM[1] : '50%', outerRadius: orM ? parseInt(orM[1]) : 80, fill: fillM ? fillM[1] : '#8884d8', dataKey: dkM ? dkM[1] : 'value', label: hasLabel }));
+            }
+          }
+          var ChartComp = RC[chartType];
+          if (!ChartComp) {
+            el.innerHTML = '<div style="color:#c00;padding:8px;">Chart component not found: ' + chartType + '</div>';
+            el.setAttribute('data-rendered', 'true');
+            return;
+          }
+          var chartProps = { width: width, height: height };
+          if (chartType !== 'PieChart') { chartProps.data = data; }
+          var chartElement = React.createElement(ChartComp, chartProps, children);
+          var renderTarget = document.createElement('div');
+          el.innerHTML = '';
+          el.appendChild(renderTarget);
+          try {
+            if (ReactDOM.createRoot) {
+              var root = ReactDOM.createRoot(renderTarget);
+              root.render(chartElement);
+            } else {
+              ReactDOM.render(chartElement, renderTarget);
+            }
+          } catch(renderErr) {
+            el.innerHTML = '<div style="color:#c00;padding:8px;border:1px solid #c00;border-radius:4px;font-size:12px;">React render error: ' + (renderErr.message || renderErr) + '</div>';
+          }
+          el.setAttribute('data-rendered', 'true');
+        } catch(e) {
+          console.error('Recharts error:', e);
+          el.innerHTML = '<div style="color:#c00;padding:8px;border:1px solid #c00;border-radius:4px;font-size:12px;">Recharts error: ' + (e.message || e) + '</div>';
+          el.setAttribute('data-rendered', 'true');
+        }
+      });
+    };
+    // Render recharts with retry pattern for async script loading
+    window.addEventListener('load', function() { window.renderRecharts(); });
+    setTimeout(function() { window.renderRecharts(); }, 1500);
+    setTimeout(function() { window.renderRecharts(); }, 3000);
+    setTimeout(function() { window.renderRecharts(); }, 5000);`
+      : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -1460,6 +2380,7 @@ export class MarkdownEngine {
       text-align: center;
       user-select: none;
     }
+    ${rechartsCSS}
   </style>
 </head>
 <body>
@@ -1471,7 +2392,7 @@ export class MarkdownEngine {
     <button id="nav-next" title="Next slide">&#9654;</button>
   </div>
   ${html}
-  <script src="https://${jsdelivr}/npm/@marp-team/marp-core/lib/browser.js"></script>
+  <script src="https://${jsdelivr}/npm/@marp-team/marp-core/lib/browser.js"></script>${rechartsCDN}
   <script>
     (function() {
       // VS Code API
@@ -1544,6 +2465,7 @@ export class MarkdownEngine {
           case 'End':          e.preventDefault(); showSlide(slides.length - 1); break;
         }
       });
+      ${rechartsScript}
     })();
   </script>
 </body>
@@ -1556,7 +2478,7 @@ export class MarkdownEngine {
   private getBaseCSS(): string {
     return `
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif);
         line-height: 1.6;
         padding: 20px;
         max-width: 900px;
@@ -2390,9 +3312,12 @@ window.renderRecharts = function() {
 
   document.querySelectorAll('.recharts:not([data-rendered])').forEach(function(el) {
     try {
-      // Get source from script tag
+      // Get source from script tag or data-source attribute (Reveal.js fallback)
       var scriptEl = el.querySelector('script[type="text/recharts"]');
       var source = scriptEl ? scriptEl.textContent : '';
+      if ((!source || !source.trim()) && el.hasAttribute('data-source')) {
+        source = el.getAttribute('data-source') || '';
+      }
       if (!source || !source.trim()) {
         el.innerHTML = '<div style="color:#999;padding:16px;text-align:center;">No chart data</div>';
         el.setAttribute('data-rendered', 'true');
@@ -2749,7 +3674,10 @@ setTimeout(function() {
     <div class="ctx-item" data-action="copy-for-lark">Copy for Lark (飞书)</div>
     <div class="ctx-item" data-action="save-html">Save as HTML</div>
     <div class="ctx-sep"></div>
-    <div class="ctx-item ctx-has-sub" data-action="theme-switch">Theme &#9656;
+    <div class="ctx-item ctx-has-sub" data-action="preview-theme-switch">Preview Theme &#9656;
+      <div class="ctx-submenu" id="ctx-preview-theme-sub"></div>
+    </div>
+    <div class="ctx-item ctx-has-sub" data-action="theme-switch">Color Scheme &#9656;
       <div class="ctx-submenu" id="ctx-theme-sub"></div>
     </div>
     <div class="ctx-item ctx-has-sub" data-action="mermaid-theme-switch">Mermaid Theme &#9656;
@@ -2967,6 +3895,7 @@ body.vscode-high-contrast .ctx-sep {
     }
 
     // Populate theme submenus
+    populatePreviewThemeSubmenu();
     populateThemeSubmenu();
     populateMermaidThemeSubmenu();
 
@@ -3011,7 +3940,60 @@ body.vscode-high-contrast .ctx-sep {
     currentTarget = null;
   }
 
-  // --- Theme submenu ---
+  // --- Preview Theme submenu ---
+  var previewThemeOptions = [
+    { group: 'Light', themes: [
+      { value: 'github', label: 'GitHub' },
+      { value: 'obsidian', label: 'Obsidian' },
+      { value: 'vue', label: 'Vue' },
+      { value: 'lark', label: 'Lark (飞书)' },
+      { value: 'smartblue', label: 'Smartblue' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'gothic', label: 'Gothic' }
+    ]},
+    { group: 'Dark', themes: [
+      { value: 'dracula', label: 'Dracula' },
+      { value: 'nord', label: 'Nord' },
+      { value: 'one-dark', label: 'One Dark' },
+      { value: 'tokyo-night', label: 'Tokyo Night' },
+      { value: 'monokai', label: 'Monokai' },
+      { value: 'solarized', label: 'Solarized' }
+    ]}
+  ];
+  function populatePreviewThemeSubmenu() {
+    var sub = document.getElementById('ctx-preview-theme-sub');
+    if (!sub) return;
+    sub.innerHTML = '';
+    var current = document.body.getAttribute('data-preview-theme') || 'github';
+    for (var g = 0; g < previewThemeOptions.length; g++) {
+      var group = previewThemeOptions[g];
+      if (g > 0) {
+        var sep = document.createElement('div');
+        sep.className = 'ctx-sep';
+        sub.appendChild(sep);
+      }
+      var header = document.createElement('div');
+      header.className = 'ctx-item';
+      header.style.fontWeight = 'bold';
+      header.style.cursor = 'default';
+      header.style.pointerEvents = 'none';
+      header.style.opacity = '0.6';
+      header.style.fontSize = '11px';
+      header.textContent = group.group;
+      sub.appendChild(header);
+      for (var t = 0; t < group.themes.length; t++) {
+        var opt = group.themes[t];
+        var item = document.createElement('div');
+        item.className = 'ctx-item';
+        item.setAttribute('data-action', 'set-preview-theme');
+        item.setAttribute('data-preview-theme', opt.value);
+        item.textContent = (opt.value === current ? '✓ ' : '   ') + opt.label;
+        sub.appendChild(item);
+      }
+    }
+  }
+
+  // --- Color Scheme submenu ---
   var themeOptions = [
     { value: 'system', label: 'System (Auto)' },
     { value: 'light',  label: 'Light' },
@@ -3166,7 +4148,7 @@ body.vscode-high-contrast .ctx-sep {
     var item = e.target.closest('.ctx-item');
     if (!item) return;
     var action = item.getAttribute('data-action');
-    if (!action || action === 'theme-switch' || action === 'mermaid-theme-switch') return; // submenu parent, ignore
+    if (!action || action === 'preview-theme-switch' || action === 'theme-switch' || action === 'mermaid-theme-switch') return; // submenu parent, ignore
 
     handleAction(action, item);
     hideMenu();
@@ -3308,6 +4290,17 @@ body.vscode-high-contrast .ctx-sep {
             command: 'saveAsHtml',
             args: [document.documentElement.outerHTML]
           });
+        }
+        break;
+
+      case 'set-preview-theme':
+        var newPreviewTheme = item.getAttribute('data-preview-theme');
+        if (newPreviewTheme) {
+          document.body.setAttribute('data-preview-theme', newPreviewTheme);
+          // Persist to VS Code settings
+          if (vscode && window._sourceUri) {
+            vscode.postMessage({ command: 'setPreviewTheme', args: [window._sourceUri, newPreviewTheme] });
+          }
         }
         break;
 
@@ -3606,88 +4599,294 @@ body.vscode-high-contrast .ctx-sep {
   }
 
   /**
-   * Get theme-specific CSS (light/dark with system-follow default)
+   * Get theme-specific CSS with multiple preview themes.
+   * Each theme defines CSS custom properties for both light and dark modes.
+   * Theme is selected via data-preview-theme attribute on body.
+   * Light/dark switching uses data-theme attribute (system/light/dark).
    */
   private getThemeCSS(): string {
-    return `
-      /* ===== Light theme (default) ===== */
-      :root, [data-theme="light"] {
-        --bg: #ffffff;
-        --fg: #24292e;
-        --fg-muted: #586069;
-        --border: #e1e4e8;
-        --bg-secondary: #f6f8fa;
-        --bg-tertiary: #eaecef;
-        --link: #0366d6;
-        --code-bg: #f6f8fa;
-        --pre-bg: #f6f8fa;
-        --blockquote-border: #dfe2e5;
-        --blockquote-bg: #f6f8fa;
-        --blockquote-fg: #6a737d;
-        --th-bg: #f6f8fa;
-        --shadow: rgba(0,0,0,0.06);
-        --mark-bg: #fff3aa;
-        --mark-fg: #24292e;
-      }
+    interface ThemeColors {
+      bg: string; fg: string; fgMuted: string; border: string;
+      bgSecondary: string; bgTertiary: string; link: string;
+      codeBg: string; preBg: string;
+      blockquoteBorder: string; blockquoteBg: string; blockquoteFg: string;
+      thBg: string; shadow: string; markBg: string; markFg: string;
+      fontFamily?: string;
+    }
 
-      /* ===== Dark theme ===== */
-      [data-theme="dark"],
-      body.vscode-dark {
-        --bg: #0d1117;
-        --fg: #c9d1d9;
-        --fg-muted: #8b949e;
-        --border: #30363d;
-        --bg-secondary: #161b22;
-        --bg-tertiary: #21262d;
-        --link: #58a6ff;
-        --code-bg: #161b22;
-        --pre-bg: #161b22;
-        --blockquote-border: #3b434b;
-        --blockquote-bg: #161b22;
-        --blockquote-fg: #8b949e;
-        --th-bg: #161b22;
-        --shadow: rgba(0,0,0,0.3);
-        --mark-bg: #5c4b00;
-        --mark-fg: #e6d9a8;
-      }
+    const themes: Record<string, { light: ThemeColors; dark: ThemeColors }> = {
+      // ── GitHub ─────────────────────────────────────────────
+      github: {
+        light: {
+          bg: '#ffffff', fg: '#24292e', fgMuted: '#586069', border: '#e1e4e8',
+          bgSecondary: '#f6f8fa', bgTertiary: '#eaecef', link: '#0366d6',
+          codeBg: '#f6f8fa', preBg: '#f6f8fa',
+          blockquoteBorder: '#dfe2e5', blockquoteBg: '#f6f8fa', blockquoteFg: '#6a737d',
+          thBg: '#f6f8fa', shadow: 'rgba(0,0,0,0.06)', markBg: '#fff3aa', markFg: '#24292e',
+        },
+        dark: {
+          bg: '#0d1117', fg: '#c9d1d9', fgMuted: '#8b949e', border: '#30363d',
+          bgSecondary: '#161b22', bgTertiary: '#21262d', link: '#58a6ff',
+          codeBg: '#161b22', preBg: '#161b22',
+          blockquoteBorder: '#3b434b', blockquoteBg: '#161b22', blockquoteFg: '#8b949e',
+          thBg: '#161b22', shadow: 'rgba(0,0,0,0.3)', markBg: '#5c4b00', markFg: '#e6d9a8',
+        },
+      },
+      // ── Obsidian ───────────────────────────────────────────
+      obsidian: {
+        light: {
+          bg: '#ffffff', fg: '#2e3338', fgMuted: '#6c7680', border: '#e3e3e3',
+          bgSecondary: '#f3f3f3', bgTertiary: '#e8e8e8', link: '#705dcf',
+          codeBg: '#f3f3f3', preBg: '#f3f3f3',
+          blockquoteBorder: '#705dcf', blockquoteBg: '#f8f5ff', blockquoteFg: '#6c7680',
+          thBg: '#f3f3f3', shadow: 'rgba(0,0,0,0.05)', markBg: '#fff3aa', markFg: '#2e3338',
+        },
+        dark: {
+          bg: '#1e1e1e', fg: '#dcddde', fgMuted: '#999999', border: '#363636',
+          bgSecondary: '#262626', bgTertiary: '#303030', link: '#a78bfa',
+          codeBg: '#262626', preBg: '#262626',
+          blockquoteBorder: '#a78bfa', blockquoteBg: '#2a2640', blockquoteFg: '#999999',
+          thBg: '#303030', shadow: 'rgba(0,0,0,0.3)', markBg: '#5c4b00', markFg: '#dcddde',
+        },
+      },
+      // ── Vue ────────────────────────────────────────────────
+      vue: {
+        light: {
+          bg: '#ffffff', fg: '#2c3e50', fgMuted: '#7f8c8d', border: '#eaecef',
+          bgSecondary: '#f3f5f7', bgTertiary: '#e8ecef', link: '#42b983',
+          codeBg: '#f3f5f7', preBg: '#f3f5f7',
+          blockquoteBorder: '#42b983', blockquoteBg: '#f0faf5', blockquoteFg: '#7f8c8d',
+          thBg: '#f3f5f7', shadow: 'rgba(0,0,0,0.05)', markBg: '#ffffb8', markFg: '#2c3e50',
+        },
+        dark: {
+          bg: '#1e1e20', fg: '#d4d4d4', fgMuted: '#858585', border: '#3e3e42',
+          bgSecondary: '#252526', bgTertiary: '#2d2d30', link: '#42d392',
+          codeBg: '#252526', preBg: '#252526',
+          blockquoteBorder: '#42b983', blockquoteBg: '#1e2a22', blockquoteFg: '#858585',
+          thBg: '#2d2d30', shadow: 'rgba(0,0,0,0.3)', markBg: '#4d4000', markFg: '#d4d4a0',
+        },
+      },
+      // ── Lark (Feishu) ─────────────────────────────────────
+      lark: {
+        light: {
+          bg: '#ffffff', fg: '#1f2329', fgMuted: '#646a73', border: '#dee0e3',
+          bgSecondary: '#f5f6f7', bgTertiary: '#eff0f1', link: '#3370ff',
+          codeBg: '#f5f6f7', preBg: '#f5f6f7',
+          blockquoteBorder: '#3370ff', blockquoteBg: '#f0f4ff', blockquoteFg: '#646a73',
+          thBg: '#f5f6f7', shadow: 'rgba(0,0,0,0.05)', markBg: 'rgba(255,246,122,0.8)', markFg: '#1f2329',
+        },
+        dark: {
+          bg: '#1b1b1f', fg: '#d1d4d8', fgMuted: '#8f959e', border: '#373940',
+          bgSecondary: '#222226', bgTertiary: '#2a2a2e', link: '#5c94ff',
+          codeBg: '#222226', preBg: '#222226',
+          blockquoteBorder: '#5c94ff', blockquoteBg: '#1e2230', blockquoteFg: '#8f959e',
+          thBg: '#2a2a2e', shadow: 'rgba(0,0,0,0.3)', markBg: '#5c4b00', markFg: '#d1d4a0',
+        },
+      },
+      // ── Smartblue ──────────────────────────────────────────
+      smartblue: {
+        light: {
+          bg: '#ffffff', fg: '#595959', fgMuted: '#888888', border: '#e0e0e0',
+          bgSecondary: '#f8f8f8', bgTertiary: '#f0f0f0', link: '#036aca',
+          codeBg: '#fff5f5', preBg: '#f8f8f8',
+          blockquoteBorder: '#b2aec5', blockquoteBg: '#fff9f9', blockquoteFg: '#666666',
+          thBg: '#f6f8fa', shadow: 'rgba(0,0,0,0.06)', markBg: '#ffffb5', markFg: '#595959',
+        },
+        dark: {
+          bg: '#1a1a2e', fg: '#d0d0d0', fgMuted: '#888888', border: '#3a3a50',
+          bgSecondary: '#21213a', bgTertiary: '#28284a', link: '#5b9fef',
+          codeBg: '#28284a', preBg: '#21213a',
+          blockquoteBorder: '#7b77a5', blockquoteBg: '#21213a', blockquoteFg: '#888888',
+          thBg: '#28284a', shadow: 'rgba(0,0,0,0.3)', markBg: '#5c4b00', markFg: '#d0d0a0',
+        },
+      },
+      // ── Medium ─────────────────────────────────────────────
+      medium: {
+        light: {
+          bg: '#ffffff', fg: '#292929', fgMuted: '#757575', border: '#e6e6e6',
+          bgSecondary: '#fafafa', bgTertiary: '#f2f2f2', link: '#1a8917',
+          codeBg: '#f2f2f2', preBg: '#f2f2f2',
+          blockquoteBorder: '#e0e0e0', blockquoteBg: 'transparent', blockquoteFg: '#6b6b6b',
+          thBg: '#fafafa', shadow: 'rgba(0,0,0,0.05)', markBg: '#ffffcc', markFg: '#292929',
+          fontFamily: "Georgia, Cambria, 'Times New Roman', Times, serif",
+        },
+        dark: {
+          bg: '#121212', fg: '#e0e0e0', fgMuted: '#999999', border: '#333333',
+          bgSecondary: '#1a1a1a', bgTertiary: '#222222', link: '#27c024',
+          codeBg: '#1a1a1a', preBg: '#1a1a1a',
+          blockquoteBorder: '#444444', blockquoteBg: 'transparent', blockquoteFg: '#888888',
+          thBg: '#1a1a1a', shadow: 'rgba(0,0,0,0.3)', markBg: '#4d4000', markFg: '#e0dfa0',
+          fontFamily: "Georgia, Cambria, 'Times New Roman', Times, serif",
+        },
+      },
+      // ── Gothic ─────────────────────────────────────────────
+      gothic: {
+        light: {
+          bg: '#fafafa', fg: '#444444', fgMuted: '#999999', border: '#dddddd',
+          bgSecondary: '#f5f5f5', bgTertiary: '#eeeeee', link: '#4183c4',
+          codeBg: '#f5f5f5', preBg: '#f5f5f5',
+          blockquoteBorder: '#cccccc', blockquoteBg: '#f9f9f9', blockquoteFg: '#777777',
+          thBg: '#f0f0f0', shadow: 'rgba(0,0,0,0.04)', markBg: '#fff8c5', markFg: '#444444',
+        },
+        dark: {
+          bg: '#181818', fg: '#c8c8c8', fgMuted: '#777777', border: '#333333',
+          bgSecondary: '#1e1e1e', bgTertiary: '#262626', link: '#6db3f2',
+          codeBg: '#1e1e1e', preBg: '#1e1e1e',
+          blockquoteBorder: '#555555', blockquoteBg: '#1e1e1e', blockquoteFg: '#888888',
+          thBg: '#262626', shadow: 'rgba(0,0,0,0.3)', markBg: '#504000', markFg: '#c8c8a0',
+        },
+      },
+      // ── Dracula ────────────────────────────────────────────
+      dracula: {
+        light: {
+          bg: '#f8f8f2', fg: '#282a36', fgMuted: '#6272a4', border: '#d6d6d6',
+          bgSecondary: '#f0f0e8', bgTertiary: '#e8e8e0', link: '#7c3aed',
+          codeBg: '#f0f0e8', preBg: '#f0f0e8',
+          blockquoteBorder: '#bd93f9', blockquoteBg: '#f5f0ff', blockquoteFg: '#6272a4',
+          thBg: '#e8e8e0', shadow: 'rgba(0,0,0,0.05)', markBg: '#ffffb5', markFg: '#282a36',
+        },
+        dark: {
+          bg: '#282a36', fg: '#f8f8f2', fgMuted: '#6272a4', border: '#44475a',
+          bgSecondary: '#21222c', bgTertiary: '#343746', link: '#8be9fd',
+          codeBg: '#21222c', preBg: '#21222c',
+          blockquoteBorder: '#bd93f9', blockquoteBg: '#2d2b3d', blockquoteFg: '#6272a4',
+          thBg: '#343746', shadow: 'rgba(0,0,0,0.4)', markBg: '#504a00', markFg: '#f8f8d0',
+        },
+      },
+      // ── Nord ───────────────────────────────────────────────
+      nord: {
+        light: {
+          bg: '#eceff4', fg: '#2e3440', fgMuted: '#4c566a', border: '#d8dee9',
+          bgSecondary: '#e5e9f0', bgTertiary: '#d8dee9', link: '#5e81ac',
+          codeBg: '#e5e9f0', preBg: '#e5e9f0',
+          blockquoteBorder: '#5e81ac', blockquoteBg: '#e5e9f0', blockquoteFg: '#4c566a',
+          thBg: '#e5e9f0', shadow: 'rgba(0,0,0,0.05)', markBg: '#ebcb8b44', markFg: '#2e3440',
+        },
+        dark: {
+          bg: '#2e3440', fg: '#eceff4', fgMuted: '#d8dee9', border: '#3b4252',
+          bgSecondary: '#3b4252', bgTertiary: '#434c5e', link: '#88c0d0',
+          codeBg: '#3b4252', preBg: '#3b4252',
+          blockquoteBorder: '#88c0d0', blockquoteBg: '#3b4252', blockquoteFg: '#d8dee9',
+          thBg: '#434c5e', shadow: 'rgba(0,0,0,0.3)', markBg: '#ebcb8b33', markFg: '#eceff4',
+        },
+      },
+      // ── One Dark ───────────────────────────────────────────
+      'one-dark': {
+        light: {
+          bg: '#fafafa', fg: '#383a42', fgMuted: '#a0a1a7', border: '#e0e0e0',
+          bgSecondary: '#f0f0f0', bgTertiary: '#e5e5e5', link: '#4078f2',
+          codeBg: '#f0f0f0', preBg: '#f0f0f0',
+          blockquoteBorder: '#4078f2', blockquoteBg: '#f0f4ff', blockquoteFg: '#a0a1a7',
+          thBg: '#e5e5e5', shadow: 'rgba(0,0,0,0.04)', markBg: '#e5c07b40', markFg: '#383a42',
+        },
+        dark: {
+          bg: '#282c34', fg: '#abb2bf', fgMuted: '#5c6370', border: '#3e4451',
+          bgSecondary: '#21252b', bgTertiary: '#2c313a', link: '#61afef',
+          codeBg: '#21252b', preBg: '#21252b',
+          blockquoteBorder: '#61afef', blockquoteBg: '#21252b', blockquoteFg: '#5c6370',
+          thBg: '#2c313a', shadow: 'rgba(0,0,0,0.3)', markBg: '#e5c07b33', markFg: '#abb2bf',
+        },
+      },
+      // ── Tokyo Night ────────────────────────────────────────
+      'tokyo-night': {
+        light: {
+          bg: '#d5d6db', fg: '#343b59', fgMuted: '#6a6f87', border: '#c0c0d0',
+          bgSecondary: '#cbced6', bgTertiary: '#c0c3cc', link: '#34548a',
+          codeBg: '#cbced6', preBg: '#cbced6',
+          blockquoteBorder: '#34548a', blockquoteBg: '#cbced6', blockquoteFg: '#6a6f87',
+          thBg: '#c0c3cc', shadow: 'rgba(0,0,0,0.05)', markBg: '#a0804040', markFg: '#343b59',
+        },
+        dark: {
+          bg: '#1a1b26', fg: '#a9b1d6', fgMuted: '#565f89', border: '#292e42',
+          bgSecondary: '#16161e', bgTertiary: '#1f2335', link: '#7aa2f7',
+          codeBg: '#16161e', preBg: '#16161e',
+          blockquoteBorder: '#7aa2f7', blockquoteBg: '#16161e', blockquoteFg: '#565f89',
+          thBg: '#1f2335', shadow: 'rgba(0,0,0,0.4)', markBg: '#e0af6840', markFg: '#a9b1d6',
+        },
+      },
+      // ── Monokai ────────────────────────────────────────────
+      monokai: {
+        light: {
+          bg: '#fafaf8', fg: '#49483e', fgMuted: '#8e8e82', border: '#e0e0d8',
+          bgSecondary: '#f2f2e8', bgTertiary: '#e8e8de', link: '#0d7faa',
+          codeBg: '#f2f2e8', preBg: '#f2f2e8',
+          blockquoteBorder: '#669d13', blockquoteBg: '#f5f8f0', blockquoteFg: '#8e8e82',
+          thBg: '#e8e8de', shadow: 'rgba(0,0,0,0.05)', markBg: '#e6db7444', markFg: '#49483e',
+        },
+        dark: {
+          bg: '#272822', fg: '#f8f8f2', fgMuted: '#75715e', border: '#3e3d32',
+          bgSecondary: '#1e1f1a', bgTertiary: '#3e3d32', link: '#66d9ef',
+          codeBg: '#1e1f1a', preBg: '#1e1f1a',
+          blockquoteBorder: '#a6e22e', blockquoteBg: '#1e1f1a', blockquoteFg: '#75715e',
+          thBg: '#3e3d32', shadow: 'rgba(0,0,0,0.4)', markBg: '#e6db7433', markFg: '#f8f8f2',
+        },
+      },
+      // ── Solarized ──────────────────────────────────────────
+      solarized: {
+        light: {
+          bg: '#fdf6e3', fg: '#657b83', fgMuted: '#93a1a1', border: '#eee8d5',
+          bgSecondary: '#eee8d5', bgTertiary: '#ddd6c1', link: '#268bd2',
+          codeBg: '#eee8d5', preBg: '#eee8d5',
+          blockquoteBorder: '#268bd2', blockquoteBg: '#eee8d5', blockquoteFg: '#93a1a1',
+          thBg: '#eee8d5', shadow: 'rgba(0,0,0,0.06)', markBg: '#b5890060', markFg: '#657b83',
+        },
+        dark: {
+          bg: '#002b36', fg: '#839496', fgMuted: '#586e75', border: '#073642',
+          bgSecondary: '#073642', bgTertiary: '#0a4756', link: '#268bd2',
+          codeBg: '#073642', preBg: '#073642',
+          blockquoteBorder: '#268bd2', blockquoteBg: '#073642', blockquoteFg: '#586e75',
+          thBg: '#073642', shadow: 'rgba(0,0,0,0.3)', markBg: '#b5890040', markFg: '#93a1a1',
+        },
+      },
+    };
 
-      /* System-follow: match OS preference */
-      @media (prefers-color-scheme: dark) {
-        [data-theme="system"] {
-          --bg: #0d1117;
-          --fg: #c9d1d9;
-          --fg-muted: #8b949e;
-          --border: #30363d;
-          --bg-secondary: #161b22;
-          --bg-tertiary: #21262d;
-          --link: #58a6ff;
-          --code-bg: #161b22;
-          --pre-bg: #161b22;
-          --blockquote-border: #3b434b;
-          --blockquote-bg: #161b22;
-          --blockquote-fg: #8b949e;
-          --th-bg: #161b22;
-          --shadow: rgba(0,0,0,0.3);
-          --mark-bg: #5c4b00;
-          --mark-fg: #e6d9a8;
-        }
-      }
+    // Generate CSS variable blocks for each theme
+    const varsBlock = (c: ThemeColors): string =>
+      `--bg:${c.bg};--fg:${c.fg};--fg-muted:${c.fgMuted};--border:${c.border};` +
+      `--bg-secondary:${c.bgSecondary};--bg-tertiary:${c.bgTertiary};--link:${c.link};` +
+      `--code-bg:${c.codeBg};--pre-bg:${c.preBg};` +
+      `--blockquote-border:${c.blockquoteBorder};--blockquote-bg:${c.blockquoteBg};--blockquote-fg:${c.blockquoteFg};` +
+      `--th-bg:${c.thBg};--shadow:${c.shadow};--mark-bg:${c.markBg};--mark-fg:${c.markFg};` +
+      (c.fontFamily ? `--font-family:${c.fontFamily};` : '');
 
-      /* ===== Shiki dual-theme: activate light or dark token colors ===== */
-      /* Light (default) */
+    let css = '';
+
+    for (const [name, { light, dark }] of Object.entries(themes)) {
+      // Light selectors: default theme (github) also applies to :root as fallback
+      const lightSel = name === 'github'
+        ? `:root, [data-preview-theme="github"]`
+        : `[data-preview-theme="${name}"]`;
+
+      // Dark selectors: default theme also catches bare [data-theme="dark"] / .vscode-dark
+      const darkSel = name === 'github'
+        ? `[data-theme="dark"], body.vscode-dark, [data-preview-theme="github"][data-theme="dark"], [data-preview-theme="github"].vscode-dark`
+        : `[data-preview-theme="${name}"][data-theme="dark"], [data-preview-theme="${name}"].vscode-dark`;
+
+      // System dark selectors
+      const sysDarkSel = name === 'github'
+        ? `[data-theme="system"], [data-preview-theme="github"][data-theme="system"]`
+        : `[data-preview-theme="${name}"][data-theme="system"]`;
+
+      css += `${lightSel}{${varsBlock(light)}}`;
+      css += `${darkSel}{${varsBlock(dark)}}`;
+      css += `@media(prefers-color-scheme:dark){${sysDarkSel}{${varsBlock(dark)}}}`;
+    }
+
+    // Shiki dual-theme: activate light or dark token colors
+    css += `
       .shiki { background-color: var(--shiki-light-bg) !important; }
       .shiki span { color: var(--shiki-light); }
-      /* Dark */
       [data-theme="dark"] .shiki,
       body.vscode-dark .shiki { background-color: var(--shiki-dark-bg) !important; }
       [data-theme="dark"] .shiki span,
       body.vscode-dark .shiki span { color: var(--shiki-dark); }
-      /* System dark */
       @media (prefers-color-scheme: dark) {
         [data-theme="system"] .shiki { background-color: var(--shiki-dark-bg) !important; }
         [data-theme="system"] .shiki span { color: var(--shiki-dark); }
       }
     `;
+
+    return css;
   }
 
   /**

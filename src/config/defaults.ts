@@ -20,7 +20,7 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
   preview: {
     mode: PreviewMode.SinglePreview,
     colorScheme: PreviewColorScheme.selectedPreviewTheme,
-    theme: 'github-light.css' as PreviewTheme,
+    theme: 'github' as PreviewTheme,
     scrollSync: true,
     liveUpdate: true,
     liveUpdateDebounceMs: 300,

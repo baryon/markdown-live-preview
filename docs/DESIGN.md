@@ -320,16 +320,21 @@ interface ReadyMessage {
 
 ## 主题系统
 
-### 预览主题
+### 预览主题（每个主题包含明/暗两种配色）
 
-- github-light.css
-- github-dark.css
-- one-light.css
-- one-dark.css
-- solarized-light.css
-- solarized-dark.css
-- atom-light.css
-- atom-dark.css
+- github — 经典 GitHub 风格
+- obsidian — Obsidian 笔记风格（紫色调）
+- vue — Vue.js 文档风格（绿色调）
+- lark — 飞书文档风格（蓝色调）
+- smartblue — 鲜明蓝色调
+- medium — Medium 阅读体验（衬线字体）
+- gothic — 极简优雅
+- dracula — 流行深色（紫/青色调）
+- nord — 北极蓝色调
+- one-dark — Atom 编辑器深色
+- tokyo-night — 柔和紫/蓝色调
+- monokai — 经典编辑器深色
+- solarized — Solarized 精确配色
 
 ### 代码主题
 

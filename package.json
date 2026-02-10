@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -364,26 +364,38 @@
           ]
         },
         "markdown-live-preview.previewTheme": {
-          "description": "Preview Theme",
-          "default": "github-light.css",
+          "description": "Preview Theme — sets the color palette for markdown preview. Each theme includes both light and dark variants.",
+          "default": "github",
           "type": "string",
           "enum": [
-            "atom-dark.css",
-            "atom-light.css",
-            "atom-material.css",
-            "github-dark.css",
-            "github-light.css",
-            "gothic.css",
-            "medium.css",
-            "monokai.css",
-            "newsprint.css",
-            "night.css",
-            "none.css",
-            "one-dark.css",
-            "one-light.css",
-            "solarized-dark.css",
-            "solarized-light.css",
-            "vue.css"
+            "github",
+            "obsidian",
+            "vue",
+            "lark",
+            "smartblue",
+            "medium",
+            "gothic",
+            "dracula",
+            "nord",
+            "one-dark",
+            "tokyo-night",
+            "monokai",
+            "solarized"
+          ],
+          "enumDescriptions": [
+            "GitHub — Classic GitHub style (default)",
+            "Obsidian — Purple accent, inspired by Obsidian notes",
+            "Vue — Green accent, inspired by Vue.js docs",
+            "Lark — Clean blue, inspired by Feishu/Lark docs",
+            "Smartblue — Vivid blue accent with grid background",
+            "Medium — Warm serif reading experience",
+            "Gothic — Minimal and elegant",
+            "Dracula — Popular dark with purple/cyan accents",
+            "Nord — Arctic, cool blue palette",
+            "One Dark — Atom editor dark colors",
+            "Tokyo Night — Soft purple/lavender palette",
+            "Monokai — Classic dark editor palette",
+            "Solarized — Ethan Schoonover's precision colors"
           ]
         },
         "markdown-live-preview.revealjsTheme": {

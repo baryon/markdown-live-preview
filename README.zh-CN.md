@@ -234,9 +234,19 @@ print(f"Pi = {math.pi:.10f}")
 
 ### 预览主题
 
-16 个预览主题：`github-light`、`github-dark`、`one-dark`、`one-light`、`solarized-dark`、`solarized-light`、`atom-dark`、`atom-light`、`atom-material`、`gothic`、`medium`、`monokai`、`newsprint`、`night`、`vue` 和 `none`。
+13 款精美预览主题，每个主题均包含明/暗两种配色。通过右键菜单可即时切换：
 
-配色方案可跟随所选主题、系统设置或编辑器的亮/暗模式。
+| 浅色系 | 深色系 |
+|--------|--------|
+| **GitHub** — 经典 GitHub 风格（默认） | **Dracula** — 紫/青色调 |
+| **Obsidian** — 紫色调，灵感来自 Obsidian 笔记 | **Nord** — 北极蓝色调 |
+| **Vue** — 绿色调，灵感来自 Vue.js 文档 | **One Dark** — Atom 编辑器配色 |
+| **Lark** — 蓝色调，灵感来自飞书文档 | **Tokyo Night** — 柔和紫蓝色调 |
+| **Smartblue** — 鲜明蓝色调 | **Monokai** — 经典编辑器深色 |
+| **Medium** — 温暖衬线阅读体验 | **Solarized** — 精确配色 |
+| **Gothic** — 极简优雅 | |
+
+配色方案（明/暗/跟随系统）可通过右键菜单或 VS Code 设置独立切换。
 
 ### 快捷操作（悬停面板）
 
@@ -320,7 +330,7 @@ print(f"Pi = {math.pi:.10f}")
 | 设置 | 默认值 | 说明 |
 |------|--------|------|
 | `markdownOpenMode` | `side-by-side` | 打开 Markdown 文件的默认模式 |
-| `previewTheme` | `github-light.css` | 预览主题 |
+| `previewTheme` | `github` | 预览主题（13 款：github, obsidian, vue, lark, smartblue, medium, gothic, dracula, nord, one-dark, tokyo-night, monokai, solarized） |
 | `codeBlockTheme` | `auto` | 语法高亮主题 |
 | `mermaidTheme` | `github-light` | Mermaid 图表主题 |
 | `mathRenderingOption` | `KaTeX` | 数学公式渲染引擎 |
