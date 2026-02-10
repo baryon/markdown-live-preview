@@ -396,40 +396,59 @@ export class MarkdownEngine {
         }
       });
 
+      // Scroll sync: suppress flag to prevent feedback loops
+      var _suppressScrollSync = false;
+      var _lastSyncedLine = -1;
+
       // Scroll sync: scroll to a specific line
       function scrollToLine(line) {
-        const elements = document.querySelectorAll('[data-line]');
-        let targetElement = null;
-        let closestLine = -1;
+        if (_lastSyncedLine === line) return;
+        _lastSyncedLine = line;
 
-        for (const el of elements) {
-          const elLine = parseInt(el.getAttribute('data-line'), 10);
+        var elements = document.querySelectorAll('[data-line]');
+        var targetElement = null;
+        var closestLine = -1;
+
+        for (var i = 0; i < elements.length; i++) {
+          var elLine = parseInt(elements[i].getAttribute('data-line'), 10);
           if (elLine <= line && elLine > closestLine) {
             closestLine = elLine;
-            targetElement = el;
+            targetElement = elements[i];
           }
         }
 
         if (targetElement) {
+          // Check if element is already visible in viewport
+          var rect = targetElement.getBoundingClientRect();
+          var margin = window.innerHeight * 0.15;
+          if (rect.top >= margin && rect.bottom <= window.innerHeight - margin) {
+            return; // Already visible, no need to scroll
+          }
+
+          _suppressScrollSync = true;
           targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Reset suppress flag after smooth scroll animation completes
+          setTimeout(function() { _suppressScrollSync = false; }, 600);
         }
       }
 
-      // Report scroll position to VS Code
-      let scrollTimeout = null;
-      document.addEventListener('scroll', () => {
+      // Report scroll position to VS Code (user-initiated scrolls only)
+      var scrollTimeout = null;
+      document.addEventListener('scroll', function() {
+        if (_suppressScrollSync) return;
         if (scrollTimeout) {
           clearTimeout(scrollTimeout);
         }
-        scrollTimeout = setTimeout(() => {
+        scrollTimeout = setTimeout(function() {
+          if (_suppressScrollSync) return;
           if (vscode) {
-            const elements = document.querySelectorAll('[data-line]');
-            let visibleLine = 0;
+            var elements = document.querySelectorAll('[data-line]');
+            var visibleLine = 0;
 
-            for (const el of elements) {
-              const rect = el.getBoundingClientRect();
+            for (var i = 0; i < elements.length; i++) {
+              var rect = elements[i].getBoundingClientRect();
               if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
-                visibleLine = parseInt(el.getAttribute('data-line'), 10);
+                visibleLine = parseInt(elements[i].getAttribute('data-line'), 10);
                 break;
               }
             }
@@ -439,7 +458,7 @@ export class MarkdownEngine {
               args: ['${templateConfig?.sourceUri || ''}', visibleLine]
             });
           }
-        }, 100);
+        }, 300);
       });
 
       // Handle link clicks
