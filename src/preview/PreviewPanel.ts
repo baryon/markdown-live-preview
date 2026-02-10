@@ -239,6 +239,15 @@ export class PreviewPanel {
       return;
     }
 
+    // Handle setFrontMatterRenderingOption — persist front matter rendering option
+    if (message.command === 'setFrontMatterRenderingOption') {
+      const option = message.args?.[0] as string;
+      if (option) {
+        updateMLPConfig('frontMatterRenderingOption', option, true);
+      }
+      return;
+    }
+
     // Handle setMermaidAsciiMode — persist mermaid ASCII mode to VS Code settings
     if (message.command === 'setMermaidAsciiMode') {
       const enabled = message.args?.[0] as boolean;

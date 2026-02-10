@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -309,7 +309,7 @@
             "table",
             "code block"
           ],
-          "default": "none"
+          "default": "table"
         },
         "markdown-live-preview.mermaidTheme": {
           "description": "%config.mermaidTheme.description%",
@@ -448,7 +448,7 @@
         },
         "markdown-live-preview.showPageToolbar": {
           "description": "%config.showPageToolbar.description%",
-          "default": false,
+          "default": true,
           "type": "boolean"
         },
         "markdown-live-preview.markdownOpenMode": {

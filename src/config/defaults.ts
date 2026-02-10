@@ -26,7 +26,7 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
     automaticallyShowPreview: false,
     disableAutoPreviewForUriSchemes: ['vscode-notebook-cell'],
     zenMode: true,
-    showPageToolbar: false,
+    showPageToolbar: true,
   },
 
   theme: {
@@ -40,7 +40,7 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
     enableTypographer: false,
     enableLinkify: true,
     enableEmojiSyntax: true,
-    frontMatterRenderingOption: FrontMatterRenderingOption.none,
+    frontMatterRenderingOption: FrontMatterRenderingOption.table,
   },
 
   math: {
