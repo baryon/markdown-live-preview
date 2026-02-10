@@ -1017,26 +1017,32 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
           return;
         }
 
-        // Calculate effective mid-line across all visible ranges
-        // This correctly handles code folding by walking the actual visible content
+        // Calculate scroll fraction from visible ranges
+        // Uses topLine of the primary (largest) visible range
+        // Formula: topLine / (totalLines - visibleLines) → 0 at top, 1 at bottom
         const totalLines = textEditor.document.lineCount;
         let totalVisibleLines = 0;
         for (const range of ranges) {
           totalVisibleLines += range.end.line - range.start.line + 1;
         }
-        let halfOffset = Math.floor(totalVisibleLines / 2);
-        let effectiveMidLine = 0;
-        for (const range of ranges) {
-          const rangeSize = range.end.line - range.start.line + 1;
-          if (halfOffset < rangeSize) {
-            effectiveMidLine = range.start.line + halfOffset;
-            break;
+
+        // Find the primary range (largest) to handle code folding
+        let primaryRange = ranges[0];
+        for (let i = 1; i < ranges.length; i++) {
+          const curSize = ranges[i].end.line - ranges[i].start.line;
+          const primarySize =
+            primaryRange.end.line - primaryRange.start.line;
+          if (curSize > primarySize) {
+            primaryRange = ranges[i];
           }
-          halfOffset -= rangeSize;
         }
 
+        const effectiveTopLine = primaryRange.start.line;
+        const scrollRange = totalLines - totalVisibleLines;
         const scrollFraction =
-          totalLines > 1 ? effectiveMidLine / (totalLines - 1) : 0;
+          scrollRange > 0
+            ? Math.min(1, Math.max(0, effectiveTopLine / scrollRange))
+            : 0;
 
         const previewProvider = await getPreviewContentProvider(sourceUri);
         previewProvider.postMessageToPreview(sourceUri, {
