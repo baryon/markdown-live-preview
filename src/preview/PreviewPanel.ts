@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { getMLPConfig, updateMLPConfig } from '../config/ConfigManager';
+import { getFullConfig, getMLPConfig, updateMLPConfig } from '../config/ConfigManager';
 import { MarkdownEngine } from '../markdown/MarkdownEngine';
 import {
   getWorkspaceFolderUri,
@@ -116,7 +116,6 @@ export class PreviewPanel {
           cursorLine,
           isVSCode: true,
           scrollSync: getMLPConfig<boolean>('scrollSync'),
-          imageUploader: getMLPConfig<string>('imageUploader'),
         },
         contentSecurityPolicy: '',
         vscodePreviewPanel: this.panel,
@@ -186,6 +185,7 @@ export class PreviewPanel {
    * Refresh the preview (reinitialize)
    */
   async refresh(): Promise<void> {
+    this.engine.updateConfig(getFullConfig());
     this.engine.clearCaches();
     await this.init();
   }

@@ -20,7 +20,7 @@ import {
   getPreviewManager,
   type PreviewManager,
 } from './preview/PreviewManager';
-import { type ImageUploader, PreviewMode } from './types';
+import { PreviewMode } from './types';
 import {
   getWorkspaceFolderUri,
   globalConfigPath,
@@ -320,8 +320,6 @@ export class PreviewProvider {
                       sourceUri: currentUri.toString(),
                       isVSCode: true,
                       scrollSync: getMLPConfig<boolean>('scrollSync'),
-                      imageUploader:
-                        getMLPConfig<ImageUploader>('imageUploader'),
                     },
                     contentSecurityPolicy: '',
                     vscodePreviewPanel: previewPanel,
@@ -461,7 +459,6 @@ export class PreviewProvider {
           cursorLine: initialLine,
           isVSCode: true,
           scrollSync: getMLPConfig<boolean>('scrollSync'),
-          imageUploader: getMLPConfig<ImageUploader>('imageUploader'),
         },
         contentSecurityPolicy: '',
         vscodePreviewPanel: previewPanel,

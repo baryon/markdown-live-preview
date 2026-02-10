@@ -61,6 +61,8 @@ export class CodeChunkExecutor {
     workingDir: string,
     enableScriptExecution: boolean,
     timeout: number,
+    defaultShell?: string,
+    defaultLatexEngine?: string,
   ): Promise<ExecutionResult> {
     if (!enableScriptExecution) {
       return {
@@ -70,7 +72,7 @@ export class CodeChunkExecutor {
       };
     }
 
-    const cmd = this.resolveCommand(chunk);
+    const cmd = this.resolveCommand(chunk, defaultShell);
     if (!cmd) {
       return {
         stdout: '',
@@ -94,7 +96,7 @@ export class CodeChunkExecutor {
 
     // Special handling for LaTeX
     if (chunk.language === 'latex' || chunk.language === 'tex') {
-      return this.executeLatex(combinedCode, workingDir, chunk.attrs, timeout);
+      return this.executeLatex(combinedCode, workingDir, chunk.attrs, timeout, defaultLatexEngine);
     }
 
     // Standard execution
@@ -121,12 +123,16 @@ export class CodeChunkExecutor {
   /**
    * Resolve the command to execute from chunk attributes.
    */
-  private resolveCommand(chunk: CodeChunk): string {
+  private resolveCommand(chunk: CodeChunk, defaultShell?: string): string {
     const { cmd } = chunk.attrs;
     if (typeof cmd === 'string' && cmd !== 'true') {
       return cmd;
     }
     // cmd=true means use the language name as the command
+    // If defaultShell is configured and language is a shell type, use it
+    if (defaultShell && ['bash', 'sh', 'zsh', 'shell'].includes(chunk.language)) {
+      return defaultShell;
+    }
     return chunk.language;
   }
 
@@ -259,8 +265,9 @@ plt.close('all')
     workingDir: string,
     attrs: CodeChunk['attrs'],
     timeout: number,
+    defaultLatexEngine?: string,
   ): Promise<ExecutionResult> {
-    const engine = attrs.latex_engine || 'pdflatex';
+    const engine = attrs.latex_engine || defaultLatexEngine || 'pdflatex';
     const tmpDir = path.join(os.tmpdir(), `mpe_latex_${Date.now()}`);
     const tmpTex = path.join(tmpDir, 'input.tex');
     const tmpPdf = path.join(tmpDir, 'input.pdf');

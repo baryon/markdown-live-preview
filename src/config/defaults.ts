@@ -5,7 +5,6 @@
 import {
   type CodeBlockTheme,
   FrontMatterRenderingOption,
-  type ImageUploader,
   type MarkdownLivePreviewConfig,
   MathRenderingOption,
   type MermaidTheme,
@@ -27,6 +26,7 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
     automaticallyShowPreview: false,
     disableAutoPreviewForUriSchemes: ['vscode-notebook-cell'],
     zenMode: true,
+    showPageToolbar: false,
   },
 
   theme: {
@@ -72,7 +72,6 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
 
   image: {
     folderPath: '/assets',
-    uploader: 'imgur' as ImageUploader,
   },
 
   misc: {

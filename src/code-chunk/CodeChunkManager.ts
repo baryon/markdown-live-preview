@@ -303,6 +303,8 @@ export class CodeChunkManager {
           workingDir,
           config.codeChunk.enableScriptExecution,
           config.codeChunk.executionTimeout,
+          config.codeChunk.defaultShell || undefined,
+          config.codeChunk.latexEngine || undefined,
         );
       }
 

@@ -10,6 +10,7 @@ import { getFullConfig } from '../config/ConfigManager';
 import {
   FrontMatterRenderingOption,
   type MarkdownLivePreviewConfig,
+  MathRenderingOption,
   type RendererOptions,
 } from '../types';
 import { generateSlug, MarkdownParser } from './MarkdownParser';
@@ -47,7 +48,6 @@ export interface HTMLTemplateOptions {
     cursorLine?: number;
     isVSCode?: boolean;
     scrollSync?: boolean;
-    imageUploader?: string;
   };
   contentSecurityPolicy?: string;
   vscodePreviewPanel?: vscode.WebviewPanel;
@@ -239,7 +239,9 @@ export class MarkdownEngine {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; font-src 'self' https: data:; connect-src 'self' https:;">
   <title>Markdown Preview</title>
-  <link rel="stylesheet" href="${KatexRenderer.getCssUrl()}">
+  ${this.config.math.renderingOption === MathRenderingOption.MathJax
+    ? `<script id="MathJax-script" async src="${this.config.math.mathjaxV3ScriptSrc}"></script>`
+    : `<link rel="stylesheet" href="${KatexRenderer.getCssUrl()}">`}
   <style>
     ${themeCSS}
     ${KatexRenderer.getCss()}
@@ -248,14 +250,37 @@ export class MarkdownEngine {
 </head>
 <body class="vscode-body ${yamlConfig.class || ''}" data-theme="system" data-preview-theme="${this.config.preview.theme || 'github'}" data-has-toc="${hasTOC}">
   <div id="toc-container" class="hidden">
-    ${frontMatterForTOC}
-    ${tocHTML}
+    <button id="toc-close-btn" class="toc-close-btn" title="Close">&times;</button>
+    <div id="toc-content">
+      ${frontMatterForTOC}
+      ${tocHTML}
+    </div>
   </div>
   <div id="preview-root">
     <div id="preview-content">
       ${html}
     </div>
   </div>
+  ${this.config.preview.showPageToolbar ? `<div id="page-toolbar" class="page-toolbar">
+    <button class="page-toolbar-toggle" title="Page tools">&#x22EF;</button>
+    <div class="page-toolbar-expanded">
+      <button class="page-tool-btn" data-action="toggle-toc-sidebar" id="pt-toc-btn" title="TOC Sidebar">TOC</button>
+      <button class="page-tool-btn" data-action="toggle-front-matter" id="pt-yaml-btn" title="Front Matter">YAML</button>
+      <div class="page-tool-sep"></div>
+      <select class="page-tool-select" id="page-preview-theme-select" title="Preview Theme"></select>
+      <select class="page-tool-select" id="page-color-scheme-select" title="Color Scheme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+      <select class="page-tool-select" id="page-mermaid-theme-select" title="Mermaid Theme"></select>
+      <button class="page-tool-btn" data-action="toggle-mermaid-ascii" id="pt-ascii-btn" title="ASCII Diagrams">ASCII</button>
+      <div class="page-tool-sep"></div>
+      <button class="page-tool-btn" data-action="edit-source" title="Edit Source">Edit</button>
+      <button class="page-tool-btn" data-action="save-html" title="Save as HTML">Save</button>
+      <button class="page-tool-btn" data-action="refresh-preview" title="Refresh">Refresh</button>
+    </div>
+  </div>` : ''}
   ${this.generateDiagramScripts()}
   <script>
     (function() {
@@ -283,10 +308,11 @@ export class MarkdownEngine {
             document.getElementById('preview-content').innerHTML = message.html;
             // Update sidebar TOC content
             if (message.tocHTML !== undefined) {
+              var tocContent = document.getElementById('toc-content');
               var tocContainer = document.getElementById('toc-container');
-              if (tocContainer) {
+              if (tocContent && tocContainer) {
                 var fmHTML = message.frontMatterForTOC || '';
-                tocContainer.innerHTML = fmHTML + message.tocHTML;
+                tocContent.innerHTML = fmHTML + message.tocHTML;
                 var hasToc = message.tocHTML.length > 0 || fmHTML.length > 0;
                 document.body.setAttribute('data-has-toc', String(hasToc));
                 // If TOC became empty, hide the sidebar
@@ -302,6 +328,10 @@ export class MarkdownEngine {
             // Initialize diagram hover controls for new content
             if (window._initDiagramControls) {
               window._initDiagramControls();
+            }
+            // Re-initialize page toolbar state
+            if (window._updatePageToolbar) {
+              window._updatePageToolbar();
             }
             break;
           case 'changeTextEditorSelection':
@@ -839,6 +869,12 @@ export class MarkdownEngine {
       toc.classList.toggle('hidden');
       document.body.classList.toggle('toc-visible');
     };
+    var tocCloseBtn = document.getElementById('toc-close-btn');
+    if (tocCloseBtn) {
+      tocCloseBtn.addEventListener('click', function() {
+        window._toggleTocSidebar();
+      });
+    }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         if (document.body.getAttribute('data-has-toc') === 'true') {
@@ -846,6 +882,242 @@ export class MarkdownEngine {
         }
       }
     });
+  </script>
+  <script>
+  (function() {
+    var toolbar = document.getElementById('page-toolbar');
+    if (!toolbar) return;
+    var toggleBtn = toolbar.querySelector('.page-toolbar-toggle');
+    var vscode = window._vscodeApi;
+
+    // --- Toggle expand/collapse ---
+    toggleBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toolbar.classList.toggle('expanded');
+    });
+    // Click outside to collapse
+    document.addEventListener('click', function(e) {
+      if (!toolbar.contains(e.target)) {
+        toolbar.classList.remove('expanded');
+      }
+    });
+
+    // --- Preview theme select ---
+    var previewThemeOptions = [
+      { group: 'Light', themes: [
+        { value: 'github', label: 'GitHub' },
+        { value: 'obsidian', label: 'Obsidian' },
+        { value: 'vue', label: 'Vue' },
+        { value: 'lark', label: 'Lark' },
+        { value: 'smartblue', label: 'Smartblue' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'gothic', label: 'Gothic' }
+      ]},
+      { group: 'Dark', themes: [
+        { value: 'dracula', label: 'Dracula' },
+        { value: 'nord', label: 'Nord' },
+        { value: 'one-dark', label: 'One Dark' },
+        { value: 'tokyo-night', label: 'Tokyo Night' },
+        { value: 'monokai', label: 'Monokai' },
+        { value: 'solarized', label: 'Solarized' }
+      ]}
+    ];
+    var mermaidThemeOptions = [
+      { group: 'Light', themes: [
+        { value: 'github-light', label: 'GitHub Light' },
+        { value: 'solarized-light', label: 'Solarized Light' },
+        { value: 'catppuccin-latte', label: 'Catppuccin Latte' },
+        { value: 'nord-light', label: 'Nord Light' },
+        { value: 'tokyo-night-light', label: 'Tokyo Night Light' },
+        { value: 'zinc-light', label: 'Zinc Light' }
+      ]},
+      { group: 'Dark', themes: [
+        { value: 'github-dark', label: 'GitHub Dark' },
+        { value: 'solarized-dark', label: 'Solarized Dark' },
+        { value: 'catppuccin-mocha', label: 'Catppuccin Mocha' },
+        { value: 'nord', label: 'Nord' },
+        { value: 'tokyo-night', label: 'Tokyo Night' },
+        { value: 'tokyo-night-storm', label: 'Tokyo Night Storm' },
+        { value: 'zinc-dark', label: 'Zinc Dark' },
+        { value: 'one-dark', label: 'One Dark' },
+        { value: 'dracula', label: 'Dracula' }
+      ]}
+    ];
+
+    function populatePreviewThemeSelect() {
+      var sel = document.getElementById('page-preview-theme-select');
+      if (!sel) return;
+      sel.innerHTML = '';
+      var current = document.body.getAttribute('data-preview-theme') || 'github';
+      for (var g = 0; g < previewThemeOptions.length; g++) {
+        var group = previewThemeOptions[g];
+        var optgroup = document.createElement('optgroup');
+        optgroup.label = group.group;
+        for (var t = 0; t < group.themes.length; t++) {
+          var opt = document.createElement('option');
+          opt.value = group.themes[t].value;
+          opt.textContent = group.themes[t].label;
+          if (group.themes[t].value === current) opt.selected = true;
+          optgroup.appendChild(opt);
+        }
+        sel.appendChild(optgroup);
+      }
+    }
+
+    function populateMermaidThemeSelect() {
+      var sel = document.getElementById('page-mermaid-theme-select');
+      if (!sel) return;
+      sel.innerHTML = '';
+      var current = window._mermaidThemeKey || '';
+      for (var g = 0; g < mermaidThemeOptions.length; g++) {
+        var group = mermaidThemeOptions[g];
+        var optgroup = document.createElement('optgroup');
+        optgroup.label = group.group;
+        for (var t = 0; t < group.themes.length; t++) {
+          var opt = document.createElement('option');
+          opt.value = group.themes[t].value;
+          opt.textContent = group.themes[t].label;
+          if (group.themes[t].value === current) opt.selected = true;
+          optgroup.appendChild(opt);
+        }
+        sel.appendChild(optgroup);
+      }
+    }
+
+    function updateColorSchemeSelect() {
+      var sel = document.getElementById('page-color-scheme-select');
+      if (!sel) return;
+      sel.value = document.body.getAttribute('data-theme') || 'system';
+    }
+
+    function updateToolbarState() {
+      // TOC button active state
+      var tocBtn = document.getElementById('pt-toc-btn');
+      if (tocBtn) {
+        var tocContainer = document.getElementById('toc-container');
+        var tocVisible = tocContainer && !tocContainer.classList.contains('hidden');
+        tocBtn.classList.toggle('active', !!tocVisible);
+        var hasToc = document.body.getAttribute('data-has-toc') === 'true';
+        tocBtn.style.display = hasToc ? '' : 'none';
+      }
+      // YAML button - only show if there's front matter in TOC
+      var yamlBtn = document.getElementById('pt-yaml-btn');
+      if (yamlBtn) {
+        var hasFm = document.querySelector('#toc-container .toc-front-matter');
+        yamlBtn.style.display = hasFm ? '' : 'none';
+      }
+      // ASCII button active state
+      var asciiBtn = document.getElementById('pt-ascii-btn');
+      if (asciiBtn) {
+        asciiBtn.classList.toggle('active', !!window._mermaidAsciiMode);
+      }
+    }
+
+    // Initialize selects
+    populatePreviewThemeSelect();
+    populateMermaidThemeSelect();
+    updateColorSchemeSelect();
+    updateToolbarState();
+
+    // --- Handle select changes ---
+    var previewThemeSel = document.getElementById('page-preview-theme-select');
+    if (previewThemeSel) {
+      previewThemeSel.addEventListener('change', function() {
+        var val = this.value;
+        document.body.setAttribute('data-preview-theme', val);
+        if (vscode && window._sourceUri) {
+          vscode.postMessage({ command: 'setPreviewTheme', args: [window._sourceUri, val] });
+        }
+      });
+    }
+
+    var colorSchemeSel = document.getElementById('page-color-scheme-select');
+    if (colorSchemeSel) {
+      colorSchemeSel.addEventListener('change', function() {
+        var val = this.value;
+        document.body.setAttribute('data-theme', val);
+        var isDark = val === 'dark' ||
+          (val === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.body.classList.toggle('vscode-dark', isDark);
+        document.body.classList.toggle('vscode-light', !isDark);
+        if (window.rerenderDiagramsForTheme) {
+          window.rerenderDiagramsForTheme();
+        }
+      });
+    }
+
+    var mermaidThemeSel = document.getElementById('page-mermaid-theme-select');
+    if (mermaidThemeSel) {
+      mermaidThemeSel.addEventListener('change', function() {
+        var val = this.value;
+        window._mermaidThemeKey = val;
+        if (window.rerenderDiagramsForTheme) {
+          window.rerenderDiagramsForTheme();
+        }
+        if (vscode) {
+          vscode.postMessage({ command: 'setMermaidTheme', args: [val] });
+        }
+      });
+    }
+
+    // --- Handle button clicks ---
+    toolbar.addEventListener('click', function(e) {
+      var btn = e.target.closest('.page-tool-btn');
+      if (!btn) return;
+      var action = btn.getAttribute('data-action');
+      switch (action) {
+        case 'toggle-toc-sidebar':
+          if (window._toggleTocSidebar) {
+            window._toggleTocSidebar();
+            updateToolbarState();
+          }
+          break;
+        case 'toggle-front-matter':
+          // Open TOC sidebar if hidden, then scroll to front matter
+          var tocC = document.getElementById('toc-container');
+          if (tocC && tocC.classList.contains('hidden')) {
+            window._toggleTocSidebar();
+          }
+          var fm = document.querySelector('#toc-container .toc-front-matter');
+          if (fm) fm.scrollIntoView({ behavior: 'smooth' });
+          updateToolbarState();
+          break;
+        case 'toggle-mermaid-ascii':
+          window._mermaidAsciiMode = !window._mermaidAsciiMode;
+          if (window.rerenderDiagramsForTheme) {
+            window.rerenderDiagramsForTheme();
+          }
+          if (vscode) {
+            vscode.postMessage({ command: 'setMermaidAsciiMode', args: [window._mermaidAsciiMode] });
+          }
+          updateToolbarState();
+          break;
+        case 'edit-source':
+          if (vscode && window._sourceUri) {
+            vscode.postMessage({ command: 'editSource', args: [window._sourceUri] });
+          }
+          break;
+        case 'save-html':
+          if (vscode) {
+            vscode.postMessage({ command: 'saveAsHtml', args: [document.documentElement.outerHTML] });
+          }
+          break;
+        case 'refresh-preview':
+          if (vscode && window._sourceUri) {
+            vscode.postMessage({ command: 'refreshPreview', args: [window._sourceUri] });
+          }
+          break;
+      }
+    });
+
+    // Expose for updateHtml re-init
+    window._updatePageToolbar = function() {
+      populatePreviewThemeSelect();
+      populateMermaidThemeSelect();
+      updateColorSchemeSelect();
+      updateToolbarState();
+    };
+  })();
   </script>
   ${this.generateContextMenuScripts()}
 </body>
@@ -2480,12 +2752,15 @@ ${slidesHtml}
       body {
         font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif);
         line-height: 1.6;
-        padding: 20px;
+        padding: 12px 20px 20px;
         max-width: 900px;
         margin: 0 auto;
         background-color: var(--bg);
         color: var(--fg);
         transition: background-color 0.2s, color 0.2s;
+      }
+      #preview-content > :first-child {
+        margin-top: 0;
       }
       a { color: var(--link); }
       img {
@@ -2600,6 +2875,28 @@ ${slidesHtml}
       }
       #toc-container.hidden {
         transform: translateX(-100%);
+      }
+      .toc-close-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--fg-muted);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .toc-close-btn:hover {
+        background: var(--bg-tertiary);
+        color: var(--fg);
       }
       body.toc-visible #preview-root {
         margin-left: 276px;
@@ -3009,6 +3306,92 @@ ${slidesHtml}
       .diagram-theme-select:focus {
         outline: 1px solid var(--link);
         outline-offset: 1px;
+      }
+
+      /* Page toolbar */
+      .page-toolbar {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        z-index: 99;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg);
+        padding: 4px 6px;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px var(--shadow);
+        border: 1px solid var(--border);
+      }
+      .page-toolbar-toggle {
+        padding: 2px 6px;
+        font-size: 16px;
+        line-height: 1;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: var(--fg-muted);
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.1s, color 0.1s;
+      }
+      .page-toolbar-toggle:hover {
+        background: var(--bg-secondary);
+        color: var(--fg);
+      }
+      .page-toolbar-expanded {
+        display: none;
+        gap: 4px;
+        align-items: center;
+      }
+      .page-toolbar.expanded .page-toolbar-toggle {
+        display: none;
+      }
+      .page-toolbar.expanded .page-toolbar-expanded {
+        display: flex;
+      }
+      .page-tool-btn {
+        padding: 2px 8px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg);
+        color: var(--fg);
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.1s;
+        white-space: nowrap;
+      }
+      .page-tool-btn:hover {
+        background: var(--bg-secondary);
+      }
+      .page-tool-btn:active {
+        background: var(--bg-tertiary);
+      }
+      .page-tool-btn.active {
+        background: var(--link);
+        color: #fff;
+        border-color: var(--link);
+      }
+      .page-tool-select {
+        padding: 2px 4px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--bg);
+        color: var(--fg);
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .page-tool-select:focus {
+        outline: 1px solid var(--link);
+        outline-offset: 1px;
+      }
+      .page-tool-sep {
+        width: 1px;
+        height: 16px;
+        background: var(--border);
+        margin: 0 2px;
       }
     `;
   }
@@ -3663,6 +4046,10 @@ setTimeout(function() {
     <div class="ctx-item" data-action="copy-code">Copy Code</div>
     <div class="ctx-item ctx-run-online" data-action="run-online">Run Online</div>
   </div>
+  <div class="ctx-group ctx-text">
+    <div class="ctx-item" data-action="copy-text">Copy</div>
+    <div class="ctx-item" data-action="select-all">Select All</div>
+  </div>
   <div class="ctx-sep ctx-sep-before-page"></div>
   <div class="ctx-group ctx-page">
     <div class="ctx-item" data-action="refresh-preview">Refresh Preview</div>
@@ -3692,51 +4079,53 @@ setTimeout(function() {
 .ctx-menu {
   position: fixed;
   z-index: 10000;
-  min-width: 180px;
-  background: #ffffff;
-  border: 1px solid #d4d4d4;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.16);
-  padding: 4px 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 13px;
-  color: #333;
+  min-width: 160px;
+  background: rgba(246,246,246,0.95);
+  border: 0.5px solid rgba(0,0,0,0.2);
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.18);
+  padding: 3px 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 12.5px;
+  color: #222;
   user-select: none;
   -webkit-user-select: none;
 }
 .ctx-item {
-  padding: 6px 24px 6px 12px;
-  cursor: pointer;
+  padding: 3px 16px 3px 6px;
+  border-radius: 3px;
+  cursor: default;
   white-space: nowrap;
   position: relative;
+  line-height: 1.35;
 }
 .ctx-item:hover {
-  background: #0078d4;
+  background: #0058d0;
   color: #fff;
 }
 .ctx-sep {
   height: 1px;
-  background: #e0e0e0;
-  margin: 4px 0;
+  background: rgba(0,0,0,0.12);
+  margin: 3px 0;
 }
 .ctx-has-sub {
-  padding-right: 28px;
+  padding-right: 20px;
 }
 .ctx-submenu {
   display: none;
   position: fixed;
-  min-width: 160px;
-  background: #ffffff;
-  border: 1px solid #d4d4d4;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.16);
-  padding: 4px 0;
-  color: #333;
+  min-width: 140px;
+  background: rgba(246,246,246,0.95);
+  border: 0.5px solid rgba(0,0,0,0.2);
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.18);
+  padding: 3px 4px;
+  color: #222;
   z-index: 10001;
 }
 /* submenu visibility controlled by JS mouseenter/mouseleave */
 .ctx-submenu .ctx-item {
-  padding: 6px 12px;
+  padding: 3px 6px;
   color: inherit;
 }
 /* Dark theme — explicit dark or vscode-dark */
@@ -3744,35 +4133,35 @@ setTimeout(function() {
 [data-theme="dark"] .ctx-submenu,
 body.vscode-dark .ctx-menu,
 body.vscode-dark .ctx-submenu {
-  background: #1e1e1e;
-  border-color: #454545;
-  color: #ccc;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.36);
+  background: rgba(40,40,40,0.9);
+  border-color: rgba(255,255,255,0.12);
+  color: #ddd;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.4);
 }
 [data-theme="dark"] .ctx-item:hover,
 body.vscode-dark .ctx-item:hover {
-  background: #094771;
+  background: #0058d0;
   color: #fff;
 }
 [data-theme="dark"] .ctx-sep,
 body.vscode-dark .ctx-sep {
-  background: #454545;
+  background: rgba(255,255,255,0.1);
 }
 /* Dark theme — system follow */
 @media (prefers-color-scheme: dark) {
   [data-theme="system"] .ctx-menu,
   [data-theme="system"] .ctx-submenu {
-    background: #1e1e1e;
-    border-color: #454545;
-    color: #ccc;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.36);
+    background: rgba(40,40,40,0.9);
+    border-color: rgba(255,255,255,0.12);
+    color: #ddd;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
   }
   [data-theme="system"] .ctx-item:hover {
-    background: #094771;
+    background: #0058d0;
     color: #fff;
   }
   [data-theme="system"] .ctx-sep {
-    background: #454545;
+    background: rgba(255,255,255,0.1);
   }
 }
 /* High contrast */
@@ -3789,6 +4178,8 @@ body.vscode-high-contrast .ctx-item:hover {
 body.vscode-high-contrast .ctx-sep {
   background: #6fc3df;
 }
+/* Hide Copy when no text selected */
+.ctx-menu:not([data-has-selection="true"]) .ctx-text .ctx-item[data-action="copy-text"] { display: none; }
 /* Hidden groups by default — JS sets data-target to show relevant ones */
 .ctx-menu:not([data-target="diagram"]) .ctx-diagram { display: none; }
 .ctx-menu:not([data-target="code"]) .ctx-code { display: none; }
@@ -3887,6 +4278,11 @@ body.vscode-high-contrast .ctx-sep {
   function showContextMenu(x, y, target) {
     currentTarget = target;
     menu.setAttribute('data-target', target.type);
+
+    // Detect text selection for copy menu item
+    var selection = window.getSelection();
+    var hasSelection = selection && selection.toString().trim().length > 0;
+    menu.setAttribute('data-has-selection', hasSelection ? 'true' : 'false');
 
     // Show/hide "Run Online" based on language support
     var runItem = menu.querySelector('.ctx-run-online');
@@ -4088,7 +4484,7 @@ body.vscode-high-contrast .ctx-sep {
         var sh = sub.offsetHeight;
         var vw = window.innerWidth;
         var vh = window.innerHeight;
-        // Default: right side of parent
+        // Default: right side of parent item
         var left = parentRect.right + 2;
         var top = parentRect.top;
         // If overflows right, show on left side
@@ -4160,6 +4556,23 @@ body.vscode-high-contrast .ctx-sep {
     var el = currentTarget.el;
 
     switch (action) {
+      // --- Text actions ---
+      case 'copy-text':
+        document.execCommand('copy');
+        showToast('Copied');
+        break;
+
+      case 'select-all':
+        var saRange = document.createRange();
+        var saContent = document.getElementById('preview-content');
+        if (saContent) {
+          saRange.selectNodeContents(saContent);
+          var saSel = window.getSelection();
+          saSel.removeAllRanges();
+          saSel.addRange(saRange);
+        }
+        break;
+
       // --- Diagram actions ---
       case 'copy-diagram-source':
         var src = el.getAttribute('data-source') || el.textContent;

@@ -7,7 +7,6 @@ import * as vscode from 'vscode';
 import type {
   CodeBlockTheme,
   FrontMatterRenderingOption,
-  ImageUploader,
   MarkdownLivePreviewConfig,
   MathRenderingOption,
   MermaidTheme,
@@ -69,6 +68,9 @@ export function getFullConfig(): MarkdownLivePreviewConfig {
       zenMode:
         getConfig<boolean>('enablePreviewZenMode') ??
         defaultConfig.preview.zenMode,
+      showPageToolbar:
+        getConfig<boolean>('showPageToolbar') ??
+        defaultConfig.preview.showPageToolbar,
     },
 
     theme: {
@@ -143,9 +145,6 @@ export function getFullConfig(): MarkdownLivePreviewConfig {
     image: {
       folderPath:
         getConfig<string>('imageFolderPath') ?? defaultConfig.image.folderPath,
-      uploader:
-        getConfig<ImageUploader>('imageUploader') ??
-        defaultConfig.image.uploader,
     },
 
     misc: {

@@ -95,9 +95,6 @@ export type RevealJsTheme =
   | 'white.css'
   | 'none.css';
 
-// Image uploader type
-export type ImageUploader = 'imgur' | 'sm.ms' | 'qiniu';
-
 // Wiki link target file name case change options
 export type WikiLinkTargetFileNameChangeCase =
   | 'none'
@@ -121,6 +118,7 @@ export interface MarkdownLivePreviewConfig {
     automaticallyShowPreview: boolean;
     disableAutoPreviewForUriSchemes: string[];
     zenMode: boolean;
+    showPageToolbar: boolean;
   };
 
   theme: {
@@ -159,7 +157,6 @@ export interface MarkdownLivePreviewConfig {
 
   image: {
     folderPath: string;
-    uploader: ImageUploader;
   };
 
   misc: {

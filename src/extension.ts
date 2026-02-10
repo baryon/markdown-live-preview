@@ -84,17 +84,6 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }
 
-  function showUploadedImages() {
-    const imageHistoryFilePath = `file://${path.resolve(
-      globalConfigPath,
-      './image_history.md',
-    )}`;
-    vscode.commands.executeCommand(
-      'vscode.open',
-      vscode.Uri.parse(imageHistoryFilePath),
-    );
-  }
-
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -124,17 +113,4 @@ export async function activate(context: vscode.ExtensionContext) {
     ),
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'markdown-live-preview.showUploadedImages',
-      showUploadedImages,
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      '_mlp.showUploadedImageHistory',
-      showUploadedImages,
-    ),
-  );
 }

@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getCodeChunkManager } from './code-chunk';
 import { getMLPConfig, PreviewColorScheme, updateMLPConfig } from './config';
-import { pasteImageFile, uploadImageFile } from './image-helper';
+import { pasteImageFile } from './image-helper';
 import { getPreviewManager } from './preview/PreviewManager';
 import { PreviewCustomEditorProvider } from './preview-custom-editor-provider';
 import { PreviewProvider } from './preview-provider';
@@ -339,10 +339,6 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
 
   function setRevealjsTheme(_uri: string, theme: string) {
     updateMLPConfig('revealjsTheme', theme, true);
-  }
-
-  function setImageUploader(imageUploader: string) {
-    updateMLPConfig('imageUploader', imageUploader, true);
   }
 
   async function clickTagA({
@@ -1244,10 +1240,6 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('_mlp.uploadImageFile', uploadImageFile),
-  );
-
-  context.subscriptions.push(
     vscode.commands.registerCommand('_mlp.refreshPreview', refreshPreview),
   );
 
@@ -1296,10 +1288,6 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('_mlp.setRevealjsTheme', setRevealjsTheme),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand('_mlp.setImageUploader', setImageUploader),
   );
 
   context.subscriptions.push(
