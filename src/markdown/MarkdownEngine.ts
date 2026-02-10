@@ -335,9 +335,9 @@ export class MarkdownEngine {
             }
             break;
           case 'changeTextEditorSelection':
-            // Scroll sync handling
-            if (message.line !== undefined) {
-              scrollToLine(message.line);
+            // Scroll sync handling (fraction-based)
+            if (message.scrollFraction !== undefined) {
+              scrollToFraction(message.scrollFraction);
             }
             break;
           case 'codeChunkRunning': {
@@ -396,43 +396,29 @@ export class MarkdownEngine {
         }
       });
 
-      // Scroll sync: suppress flag to prevent feedback loops
+      // Scroll sync: fraction-based (percentage sync between editor and preview)
       var _suppressScrollSync = false;
-      var _lastSyncedLine = -1;
+      var _lastScrollFraction = -1;
 
-      // Scroll sync: scroll to a specific line
-      function scrollToLine(line) {
-        if (_lastSyncedLine === line) return;
-        _lastSyncedLine = line;
+      // Scroll preview to a given fraction (0.0 = top, 1.0 = bottom)
+      function scrollToFraction(fraction) {
+        // Avoid redundant syncs
+        if (Math.abs(fraction - _lastScrollFraction) < 0.005) return;
+        _lastScrollFraction = fraction;
 
-        var elements = document.querySelectorAll('[data-line]');
-        var targetElement = null;
-        var closestLine = -1;
+        var scrollMax = document.documentElement.scrollHeight - window.innerHeight;
+        if (scrollMax <= 0) return;
 
-        for (var i = 0; i < elements.length; i++) {
-          var elLine = parseInt(elements[i].getAttribute('data-line'), 10);
-          if (elLine <= line && elLine > closestLine) {
-            closestLine = elLine;
-            targetElement = elements[i];
-          }
-        }
+        var targetY = fraction * scrollMax;
+        var drift = Math.abs(window.scrollY - targetY);
+        if (drift < window.innerHeight * 0.05) return; // close enough
 
-        if (targetElement) {
-          // Check if element is already visible in viewport
-          var rect = targetElement.getBoundingClientRect();
-          var margin = window.innerHeight * 0.15;
-          if (rect.top >= margin && rect.bottom <= window.innerHeight - margin) {
-            return; // Already visible, no need to scroll
-          }
-
-          _suppressScrollSync = true;
-          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Reset suppress flag after smooth scroll animation completes
-          setTimeout(function() { _suppressScrollSync = false; }, 600);
-        }
+        _suppressScrollSync = true;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+        setTimeout(function() { _suppressScrollSync = false; }, 600);
       }
 
-      // Report scroll position to VS Code (user-initiated scrolls only)
+      // Report scroll position to VS Code as fraction (user-initiated scrolls only)
       var scrollTimeout = null;
       document.addEventListener('scroll', function() {
         if (_suppressScrollSync) return;
@@ -442,20 +428,12 @@ export class MarkdownEngine {
         scrollTimeout = setTimeout(function() {
           if (_suppressScrollSync) return;
           if (vscode) {
-            var elements = document.querySelectorAll('[data-line]');
-            var visibleLine = 0;
-
-            for (var i = 0; i < elements.length; i++) {
-              var rect = elements[i].getBoundingClientRect();
-              if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
-                visibleLine = parseInt(elements[i].getAttribute('data-line'), 10);
-                break;
-              }
-            }
+            var scrollMax = document.documentElement.scrollHeight - window.innerHeight;
+            var scrollFraction = scrollMax > 0 ? window.scrollY / scrollMax : 0;
 
             vscode.postMessage({
               command: 'revealLine',
-              args: ['${templateConfig?.sourceUri || ''}', visibleLine]
+              args: ['${templateConfig?.sourceUri || ''}', scrollFraction]
             });
           }
         }, 300);

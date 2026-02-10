@@ -101,6 +101,7 @@ export function getTopVisibleLine(
 
 /**
  * Get the bottom visible line of an editor
+ * Uses the last visible range to correctly handle code folding
  */
 export function getBottomVisibleLine(
   editor: vscode.TextEditor,
@@ -109,13 +110,14 @@ export function getBottomVisibleLine(
     return undefined;
   }
 
-  const firstVisiblePosition = editor.visibleRanges[0].end;
-  const lineNumber = firstVisiblePosition.line;
+  const lastRange = editor.visibleRanges[editor.visibleRanges.length - 1];
+  const lastVisiblePosition = lastRange.end;
+  const lineNumber = lastVisiblePosition.line;
   let text = '';
   if (lineNumber < editor.document.lineCount) {
     text = editor.document.lineAt(lineNumber).text;
   }
-  const progress = firstVisiblePosition.character / (text.length + 2);
+  const progress = lastVisiblePosition.character / (text.length + 2);
   return lineNumber + progress;
 }
 

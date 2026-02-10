@@ -12,13 +12,12 @@ import { PreviewCustomEditorProvider } from './preview-custom-editor-provider';
 import { PreviewProvider } from './preview-provider';
 import { PreviewMode } from './types';
 import {
-  getBottomVisibleLine,
   getEditorActiveCursorLine,
-  getTopVisibleLine,
   isMarkdownFile,
 } from './utils';
 
 let editorScrollDelay = Date.now();
+let selectionSyncTime = 0; // Prevents visible-range handler from overriding selection sync
 
 // Hide default VS Code markdown preview buttons if necessary
 const hideDefaultVSCodeMarkdownPreviewButtons = vscode.workspace
@@ -949,8 +948,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
     }),
   );
 
-  // Scroll sync: editor cursor click/keyboard → preview
-  // Only fires for explicit user actions (mouse click, keyboard nav), not programmatic
+  // Scroll sync: editor cursor click/keyboard → preview (fraction-based)
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection(async (event) => {
       // Only handle explicit user actions (mouse click or keyboard navigation)
@@ -978,32 +976,24 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
         return;
       }
 
-      const firstVisibleScreenRow = getTopVisibleLine(event.textEditor);
-      const lastVisibleScreenRow = getBottomVisibleLine(event.textEditor);
+      // Use cursor line to compute scroll fraction
+      const cursorLine = event.selections[0].active.line;
+      const totalLines = event.textEditor.document.lineCount;
+      const scrollFraction =
+        totalLines > 1 ? cursorLine / (totalLines - 1) : 0;
 
-      if (
-        typeof firstVisibleScreenRow === 'undefined' ||
-        typeof lastVisibleScreenRow === 'undefined'
-      ) {
-        return;
-      }
-
-      const topRatio =
-        (event.selections[0].active.line - firstVisibleScreenRow) /
-        (lastVisibleScreenRow - firstVisibleScreenRow);
-
+      selectionSyncTime = Date.now();
       const previewProvider = await getPreviewContentProvider(
         event.textEditor.document.uri,
       );
       previewProvider.postMessageToPreview(event.textEditor.document.uri, {
         command: 'changeTextEditorSelection',
-        line: event.selections[0].active.line,
-        topRatio,
+        scrollFraction,
       });
     }),
   );
 
-  // Scroll sync: editor scroll → preview
+  // Scroll sync: editor scroll → preview (fraction-based)
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorVisibleRanges(async (event) => {
       if (!getMLPConfig<boolean>('scrollSync')) {
@@ -1014,38 +1004,45 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
       if (Date.now() < editorScrollDelay) {
         return;
       }
+
+      // Don't override a recent selection-based sync (click/keyboard)
+      if (Date.now() - selectionSyncTime < 500) {
+        return;
+      }
+
       if (isMarkdownFile(textEditor.document)) {
         const sourceUri = textEditor.document.uri;
-        if (!event.textEditor.visibleRanges.length) {
-          return undefined;
-        } else {
-          const topLine = getTopVisibleLine(textEditor);
-          const bottomLine = getBottomVisibleLine(textEditor);
-
-          if (
-            typeof topLine === 'undefined' ||
-            typeof bottomLine === 'undefined'
-          ) {
-            return;
-          }
-
-          let midLine: number;
-          if (topLine === 0) {
-            midLine = 0;
-          } else if (
-            Math.floor(bottomLine) ===
-            textEditor.document.lineCount - 1
-          ) {
-            midLine = bottomLine;
-          } else {
-            midLine = Math.floor((topLine + bottomLine) / 2);
-          }
-          const previewProvider = await getPreviewContentProvider(sourceUri);
-          previewProvider.postMessageToPreview(sourceUri, {
-            command: 'changeTextEditorSelection',
-            line: midLine,
-          });
+        const ranges = textEditor.visibleRanges;
+        if (!ranges.length) {
+          return;
         }
+
+        // Calculate effective mid-line across all visible ranges
+        // This correctly handles code folding by walking the actual visible content
+        const totalLines = textEditor.document.lineCount;
+        let totalVisibleLines = 0;
+        for (const range of ranges) {
+          totalVisibleLines += range.end.line - range.start.line + 1;
+        }
+        let halfOffset = Math.floor(totalVisibleLines / 2);
+        let effectiveMidLine = 0;
+        for (const range of ranges) {
+          const rangeSize = range.end.line - range.start.line + 1;
+          if (halfOffset < rangeSize) {
+            effectiveMidLine = range.start.line + halfOffset;
+            break;
+          }
+          halfOffset -= rangeSize;
+        }
+
+        const scrollFraction =
+          totalLines > 1 ? effectiveMidLine / (totalLines - 1) : 0;
+
+        const previewProvider = await getPreviewContentProvider(sourceUri);
+        previewProvider.postMessageToPreview(sourceUri, {
+          command: 'changeTextEditorSelection',
+          scrollFraction,
+        });
       }
     }),
   );
@@ -1415,7 +1412,7 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
   );
 }
 
-function revealLine(uri: string, line: number) {
+function revealLine(uri: string, scrollFraction: number) {
   if (!getMLPConfig<boolean>('scrollSync')) {
     return;
   }
@@ -1429,30 +1426,26 @@ function revealLine(uri: string, line: number) {
         editor.document.uri.fsPath === sourceUri.fsPath,
     )
     .forEach((editor) => {
-      const sourceLine = Math.min(
-        Math.floor(line),
-        editor.document.lineCount - 1,
+      const totalLines = editor.document.lineCount;
+      const targetLine = Math.min(
+        Math.floor(scrollFraction * (totalLines - 1)),
+        totalLines - 1,
       );
 
-      // Check if line is already visible — skip scroll to avoid jumps
-      const topLine = getTopVisibleLine(editor);
-      const bottomLine = getBottomVisibleLine(editor);
-      if (
-        typeof topLine !== 'undefined' &&
-        typeof bottomLine !== 'undefined'
-      ) {
-        const margin = (bottomLine - topLine) * 0.15;
-        if (sourceLine >= topLine + margin && sourceLine <= bottomLine - margin) {
-          return; // Line already visible with margin, no need to scroll
+      // Check if target line is already visible in any range
+      for (const range of editor.visibleRanges) {
+        const margin = (range.end.line - range.start.line) * 0.1;
+        if (
+          targetLine >= range.start.line + margin &&
+          targetLine <= range.end.line - margin
+        ) {
+          return; // Already visible
         }
       }
 
-      const fraction = line - sourceLine;
-      const text = editor.document.lineAt(sourceLine).text;
-      const start = Math.floor(fraction * text.length);
       editorScrollDelay = Date.now() + 500;
       editor.revealRange(
-        new vscode.Range(sourceLine, start, sourceLine + 1, 0),
+        new vscode.Range(targetLine, 0, targetLine + 1, 0),
         vscode.TextEditorRevealType.Default,
       );
       editorScrollDelay = Date.now() + 500;
