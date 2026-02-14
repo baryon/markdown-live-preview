@@ -40,6 +40,8 @@ export const defaultConfig: MarkdownLivePreviewConfig = {
     enableTypographer: false,
     enableLinkify: true,
     enableEmojiSyntax: true,
+    enableIndentedCodeBlock: true,
+    indentedCodeBlockSpaces: 2,
     frontMatterRenderingOption: FrontMatterRenderingOption.table,
   },
 

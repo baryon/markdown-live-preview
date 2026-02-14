@@ -132,6 +132,8 @@ export interface MarkdownLivePreviewConfig {
     enableTypographer: boolean;
     enableLinkify: boolean;
     enableEmojiSyntax: boolean;
+    enableIndentedCodeBlock: boolean;
+    indentedCodeBlockSpaces: number;
     frontMatterRenderingOption: FrontMatterRenderingOption;
   };
 

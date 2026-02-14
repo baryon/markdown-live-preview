@@ -30,6 +30,50 @@ export interface MarkdownParserOptions {
 }
 
 /**
+ * Create a custom code block rule with configurable indent spaces.
+ * Based on markdown-it's default code rule but with customizable indent.
+ */
+function createCustomCodeRule(indentSpaces: number) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function code(state: any, startLine: number, endLine: number /*, silent*/) {
+    let nextLine, last, token;
+
+    if (state.sCount[startLine] - state.blkIndent < indentSpaces) {
+      return false;
+    }
+
+    last = nextLine = startLine + 1;
+
+    while (nextLine < endLine) {
+      if (state.isEmpty(nextLine)) {
+        nextLine++;
+        continue;
+      }
+
+      if (state.sCount[nextLine] - state.blkIndent >= indentSpaces) {
+        nextLine++;
+        last = nextLine;
+        continue;
+      }
+      break;
+    }
+
+    state.line = last;
+
+    token = state.push('code_block', 'code', 0);
+    token.content = state.getLines(
+      startLine,
+      last,
+      indentSpaces + state.blkIndent,
+      true,
+    );
+    token.map = [startLine, state.line];
+
+    return true;
+  };
+}
+
+/**
  * Create and configure a markdown-it instance
  */
 /**
@@ -63,6 +107,14 @@ export function createMarkdownParser(
   };
 
   const md = new MarkdownIt(mdOptions);
+
+  // Configure indented code blocks
+  if (!config.markdown.enableIndentedCodeBlock) {
+    md.disable('code');
+  } else if (config.markdown.indentedCodeBlockSpaces !== 4) {
+    // Replace the default code rule with a custom one that uses configured indent
+    md.block.ruler.at('code', createCustomCodeRule(config.markdown.indentedCodeBlockSpaces));
+  }
 
   // Enable emoji plugin
   if (config.markdown.enableEmojiSyntax) {

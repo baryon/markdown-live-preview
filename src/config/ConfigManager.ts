@@ -97,6 +97,12 @@ export function getFullConfig(): MarkdownLivePreviewConfig {
       enableEmojiSyntax:
         getConfig<boolean>('enableEmojiSyntax') ??
         defaultConfig.markdown.enableEmojiSyntax,
+      enableIndentedCodeBlock:
+        getConfig<boolean>('enableIndentedCodeBlock') ??
+        defaultConfig.markdown.enableIndentedCodeBlock,
+      indentedCodeBlockSpaces:
+        getConfig<number>('indentedCodeBlockSpaces') ??
+        defaultConfig.markdown.indentedCodeBlockSpaces,
       frontMatterRenderingOption:
         getConfig<FrontMatterRenderingOption>('frontMatterRenderingOption') ??
         defaultConfig.markdown.frontMatterRenderingOption,

@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -217,6 +217,21 @@
           "description": "%config.enableTypographer.description%",
           "default": false,
           "type": "boolean"
+        },
+        "markdown-live-preview.enableIndentedCodeBlock": {
+          "description": "%config.enableIndentedCodeBlock.description%",
+          "default": true,
+          "type": "boolean"
+        },
+        "markdown-live-preview.indentedCodeBlockSpaces": {
+          "description": "%config.indentedCodeBlockSpaces.description%",
+          "default": 2,
+          "type": "number",
+          "enum": [2, 4],
+          "enumDescriptions": [
+            "%config.indentedCodeBlockSpaces.enumDescription.0%",
+            "%config.indentedCodeBlockSpaces.enumDescription.1%"
+          ]
         },
         "markdown-live-preview.mathRenderingOption": {
           "description": "%config.mathRenderingOption.description%",
