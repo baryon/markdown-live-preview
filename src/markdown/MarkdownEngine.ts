@@ -121,9 +121,14 @@ export class MarkdownEngine {
       }
     }
 
+    // Extract math expressions BEFORE markdown-it rendering to prevent
+    // HTML escaping of <, >, &, etc. inside math formulas
+    const { content: contentWithPlaceholders, mathExpressions } =
+      this.katexRenderer.extractMathExpressions(processedContent);
+
     // Render markdown to HTML
     // (Mermaid blocks are handled by the custom fence renderer in MarkdownParser)
-    let html = this.parser.render(processedContent, { lineOffset });
+    let html = this.parser.render(contentWithPlaceholders, { lineOffset });
 
     // Resolve relative image paths to data URIs for webview compatibility
     if (options?.sourceUri) {
@@ -138,8 +143,8 @@ export class MarkdownEngine {
     // Process Obsidian-style callouts
     html = this.processCallouts(html);
 
-    // Process math expressions
-    html = this.katexRenderer.processMathInContent(html);
+    // Restore math expressions with rendered KaTeX HTML
+    html = this.katexRenderer.restoreMathExpressions(html, mathExpressions);
 
     // Process code blocks with syntax highlighting
     html = await this.processCodeBlocks(html);
@@ -1601,10 +1606,14 @@ export class MarkdownEngine {
         // continue with unprocessed content
       }
 
-      // 3. Render markdown to HTML via markdown-it
-      let slideHtml = this.parser.render(slideContent);
+      // 3. Extract math expressions before markdown-it rendering
+      const { content: slideContentWithPlaceholders, mathExpressions: slideMathExpressions } =
+        this.katexRenderer.extractMathExpressions(slideContent);
 
-      // 4. Resolve image paths to data URIs
+      // 4. Render markdown to HTML via markdown-it
+      let slideHtml = this.parser.render(slideContentWithPlaceholders);
+
+      // 5. Resolve image paths to data URIs
       if (sourceDir) {
         try {
           slideHtml = this.resolveImagePaths(slideHtml, sourceDir);
@@ -1613,11 +1622,11 @@ export class MarkdownEngine {
         }
       }
 
-      // 5. Process Obsidian-style callouts
+      // 6. Process Obsidian-style callouts
       slideHtml = this.processCallouts(slideHtml);
 
-      // 6. Process KaTeX math
-      slideHtml = this.katexRenderer.processMathInContent(slideHtml);
+      // 7. Restore math expressions with rendered KaTeX HTML
+      slideHtml = this.katexRenderer.restoreMathExpressions(slideHtml, slideMathExpressions);
 
       // 7. Process code blocks with Shiki syntax highlighting
       slideHtml = await this.processCodeBlocks(slideHtml);

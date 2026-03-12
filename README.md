@@ -146,20 +146,74 @@ export const showAdvanced = true
 
 Supported: `export const/let/var`, inline `{expressions}`, `style={{...}}` / `className` conversion, `.map()` iterations, `&&` / ternary conditionals, and multi-line JSX blocks. Code blocks, KaTeX math, Mermaid diagrams, and Recharts charts inside `.mdx` files are all preserved and rendered normally.
 
-### Math
+### Math — LaTeX Formula Rendering
 
-KaTeX (default) or MathJax for rendering LaTeX math expressions:
+Full LaTeX math support powered by [KaTeX](https://katex.org) (default) or [MathJax](https://www.mathjax.org). Math expressions are extracted before Markdown processing, so symbols like `<`, `>`, `&`, `\` are never corrupted by HTML escaping.
+
+#### Inline Math
+
+Use `$...$` or `\(...\)` for inline expressions:
 
 ```markdown
-Inline: $E = mc^2$
+The equation $E = mc^2$ changed physics.
 
-Block:
-$$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-$$
+The critical boundary satisfies $d_c > 0$ and $\det G < 0$.
+
+Use backslash form: \(a^2 + b^2 = c^2\)
 ```
 
-Delimiters are customizable. Both `$...$` / `$$...$$` and `\(...\)` / `\[...\]` are supported out of the box.
+#### Block (Display) Math
+
+Use `$$...$$` or `\[...\]` for centered display equations:
+
+```markdown
+$$
+\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}
+$$
+
+$$
+\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u
+$$
+
+\[
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+\]
+```
+
+#### Supported Syntax
+
+KaTeX covers a wide range of LaTeX commands:
+
+| Category | Examples |
+|----------|---------|
+| **Greek letters** | `$\alpha, \beta, \gamma, \Omega$` |
+| **Fractions** | `$\frac{a}{b}$`, `$\dfrac{dy}{dx}$` |
+| **Subscript / Superscript** | `$x_i^2$`, `$a_{n+1}$` |
+| **Roots** | `$\sqrt{x}$`, `$\sqrt[3]{8}$` |
+| **Operators** | `$\sum, \prod, \int, \lim, \det, \log$` |
+| **Matrices** | `\begin{pmatrix} a & b \\ c & d \end{pmatrix}` |
+| **Comparisons** | `$a < b$`, `$x > 0$`, `$a \leq b$`, `$x \geq 0$` |
+| **Arrows** | `$\to, \Rightarrow, \iff, \mapsto$` |
+| **Accents** | `$\hat{x}, \bar{y}, \vec{v}, \dot{a}$` |
+| **Text in math** | `$\mathrm{info}$`, `$\text{where } x > 0$` |
+| **Aligned equations** | `\begin{aligned} ... \end{aligned}` |
+
+#### Quick Actions
+
+Hover over a block math expression to reveal action buttons:
+
+- **TeX** — Copy the LaTeX source to clipboard
+- **PNG** — Copy the rendered formula as a PNG image
+
+#### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `mathRenderingOption` | `KaTeX` | Engine: `KaTeX`, `MathJax`, or `None` |
+| `math.inlineDelimiters` | `[["$","$"], ["\\(","\\)"]]` | Inline math delimiter pairs |
+| `math.blockDelimiters` | `[["$$","$$"], ["\\[","\\]"]]` | Block math delimiter pairs |
+
+Delimiters are fully customizable — add or remove any delimiter pair in VS Code settings.
 
 ### Presentations — Marp
 

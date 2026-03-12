@@ -89,7 +89,135 @@ export class KatexRenderer {
   }
 
   /**
+   * Extract math expressions from raw markdown BEFORE markdown-it processing.
+   * Replaces them with placeholders to prevent HTML escaping of <, >, etc.
+   * Returns the modified content and the extracted expressions map.
+   */
+  extractMathExpressions(content: string): {
+    content: string;
+    mathExpressions: Map<string, { expression: string; displayMode: boolean }>;
+  } {
+    const config = getFullConfig();
+    const mathExpressions = new Map<
+      string,
+      { expression: string; displayMode: boolean }
+    >();
+
+    if (config.math.renderingOption === MathRenderingOption.None) {
+      return { content, mathExpressions };
+    }
+
+    let result = content;
+    let counter = 0;
+
+    // Protect fenced code blocks from math extraction
+    const codeBlocks: string[] = [];
+    result = result.replace(
+      /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?\n\2\s*(?:\n|$)/g,
+      (match) => {
+        const index = codeBlocks.length;
+        codeBlocks.push(match);
+        return `\nCODE_BLOCK_PLACEHOLDER_${index}\n`;
+      },
+    );
+
+    const extractWithDelimiters = (
+      text: string,
+      startDelimiter: string,
+      endDelimiter: string,
+      displayMode: boolean,
+    ): string => {
+      const escapedStart = this.escapeRegex(startDelimiter);
+      const escapedEnd = this.escapeRegex(endDelimiter);
+
+      let pattern: RegExp;
+      if (startDelimiter === '$' && endDelimiter === '$') {
+        pattern = /(?<!\\)(?<!\$)\$(?!\$)(.+?)(?<!\\)\$(?!\$)/g;
+      } else if (startDelimiter === '$$' && endDelimiter === '$$') {
+        pattern = /(?<!\\)\$\$([\s\S]+?)(?<!\\)\$\$/g;
+      } else {
+        pattern = new RegExp(
+          `${escapedStart}([\\s\\S]+?)${escapedEnd}`,
+          'g',
+        );
+      }
+
+      return text.replace(pattern, (_, expression: string) => {
+        // Use HTML comment as placeholder — markdown-it passes these through unchanged
+        const placeholder = `<!--MATH_EXPR_${counter}-->`;
+        mathExpressions.set(placeholder, {
+          expression: expression.trim(),
+          displayMode,
+        });
+        counter++;
+        // For block math, wrap in its own paragraph to avoid being inside <p>
+        return displayMode
+          ? `\n\n${placeholder}\n\n`
+          : placeholder;
+      });
+    };
+
+    // Extract block math first (to avoid conflicts with inline)
+    for (const [start, end] of config.math.blockDelimiters) {
+      result = extractWithDelimiters(result, start, end, true);
+    }
+
+    // Extract inline math
+    for (const [start, end] of config.math.inlineDelimiters) {
+      result = extractWithDelimiters(result, start, end, false);
+    }
+
+    // Restore code blocks
+    result = result.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (_, index) => {
+      return codeBlocks[parseInt(index, 10)];
+    });
+
+    return { content: result, mathExpressions };
+  }
+
+  /**
+   * Restore math placeholders with rendered KaTeX HTML.
+   * Called AFTER markdown-it processing.
+   */
+  restoreMathExpressions(
+    html: string,
+    mathExpressions: Map<string, { expression: string; displayMode: boolean }>,
+  ): string {
+    if (mathExpressions.size === 0) {
+      return html;
+    }
+
+    let result = html;
+    for (const [placeholder, { expression, displayMode }] of mathExpressions) {
+      const rendered = this.render(expression, displayMode);
+
+      let replacement: string;
+      if (displayMode) {
+        const escapedSource = this.escapeHtmlAttribute(expression);
+        replacement =
+          `<div class="math-container">` +
+          `<div class="math-controls">` +
+          `<button class="math-toggle-btn" title="Toggle controls">⋯</button>` +
+          `<div class="math-controls-expanded">` +
+          `<button class="math-copy-source-btn" title="Copy LaTeX">TeX</button>` +
+          `<button class="math-copy-png-btn" title="Copy as PNG">PNG</button>` +
+          `</div>` +
+          `</div>` +
+          `<div class="math-block" data-source="${escapedSource}">${rendered.html}</div>` +
+          `</div>`;
+      } else {
+        replacement = `<span class="math-inline">${rendered.html}</span>`;
+      }
+
+      result = result.split(placeholder).join(replacement);
+    }
+
+    return result;
+  }
+
+  /**
    * Process markdown content and replace math expressions with rendered HTML
+   * (Legacy method for processing math in already-rendered HTML)
    */
   processMathInContent(content: string): string {
     const config = getFullConfig();
