@@ -366,6 +366,17 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
           } else {
             href = vscode.Uri.joinPath(sourceUri, '..', href).toString();
           }
+        } else if (!href.includes('/') && !href.includes('\\')) {
+          // Bare filename (no path separators) — wikilink style.
+          // Search the entire workspace for the file before falling back to
+          // resolving relative to the current file's directory.
+          const found = await vscode.workspace.findFiles(`**/${href}`, null, 1);
+          if (found.length > 0) {
+            href = found[0].toString();
+          } else {
+            const dirUri = vscode.Uri.joinPath(sourceUri, '..');
+            href = vscode.Uri.joinPath(dirUri, href).toString();
+          }
         } else {
           // File-relative path
           const dirUri = vscode.Uri.joinPath(sourceUri, '..');
