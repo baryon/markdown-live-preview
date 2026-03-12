@@ -350,22 +350,28 @@ export class PreviewPanel {
 
     if (!saveUri) return;
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Exporting PDF...',
-        cancellable: false,
-      },
-      async () => {
-        try {
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Exporting PDF...',
+          cancellable: false,
+        },
+        async () => {
           const { exportToPdf } = await import('../pdf/PdfExporter');
           await exportToPdf(htmlContent, saveUri.fsPath);
-          vscode.window.showInformationMessage(`Saved to ${saveUri.fsPath}`);
-        } catch (err) {
-          vscode.window.showErrorMessage(`Failed to export PDF: ${err}`);
-        }
-      },
-    );
+        },
+      );
+      const action = await vscode.window.showInformationMessage(
+        `Saved to ${saveUri.fsPath}`,
+        'Open',
+      );
+      if (action === 'Open') {
+        vscode.env.openExternal(saveUri);
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to export PDF: ${err}`);
+    }
   }
 
   /**

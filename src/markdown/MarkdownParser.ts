@@ -636,6 +636,7 @@ function generateLineNumberedCodeBlock(
   return (
     `<div class="code-block-container"${dlAttr}>` +
     `<div class="code-block-controls">` +
+    `<button class="code-wrap-btn" title="Toggle word wrap">Wrap</button>` +
     `<button class="code-copy-btn" title="Copy code">Copy</button>` +
     `</div>` +
     preBlock +

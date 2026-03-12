@@ -593,6 +593,16 @@ export class MarkdownEngine {
       document.addEventListener('click', function(e) {
         var target = e.target;
 
+        // Toggle word wrap on code block
+        if (target.matches('.code-block-container .code-wrap-btn')) {
+          var container = target.closest('.code-block-container');
+          if (container) {
+            container.classList.toggle('code-word-wrap');
+            target.classList.toggle('active');
+          }
+          return;
+        }
+
         // Copy code from code block container
         if (target.matches('.code-block-container .code-copy-btn')) {
           var container = target.closest('.code-block-container');
@@ -1816,6 +1826,7 @@ export class MarkdownEngine {
     body.play-mode .reveal .diagram-controls,
     body.play-mode .reveal .math-controls,
     body.play-mode .reveal .code-copy-btn,
+    body.play-mode .reveal .code-wrap-btn,
     body.play-mode .reveal .code-block-container .code-header {
       display: none !important;
     }
@@ -2017,6 +2028,7 @@ export class MarkdownEngine {
     body:not(.play-mode) .reveal .diagram-controls,
     body:not(.play-mode) .reveal .math-controls,
     body:not(.play-mode) .reveal .code-copy-btn,
+    body:not(.play-mode) .reveal .code-wrap-btn,
     body:not(.play-mode) .reveal .code-block-container .code-header {
       display: none !important;
     }
@@ -3145,7 +3157,31 @@ ${slidesHtml}
         display: flex;
       }
 
+      /* ===== Code block word wrap mode ===== */
+      .code-block-container.code-word-wrap pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        overflow-x: hidden;
+      }
+      .code-block-container.code-word-wrap pre .line,
+      .code-block-container.code-word-wrap pre .code-line {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      .code-block-container.code-word-wrap pre .line-number {
+        vertical-align: top;
+      }
+      .code-block-container.code-word-wrap pre .line-content {
+        display: inline;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+
       /* ===== Shared control button styles ===== */
+      .code-wrap-btn,
       .code-copy-btn,
       .diagram-copy-source-btn,
       .diagram-copy-svg-btn,
@@ -3161,6 +3197,7 @@ ${slidesHtml}
         font-family: inherit;
         transition: background 0.1s;
       }
+      .code-wrap-btn:hover,
       .code-copy-btn:hover,
       .diagram-copy-source-btn:hover,
       .diagram-copy-svg-btn:hover,
@@ -3168,6 +3205,7 @@ ${slidesHtml}
       .diagram-ascii-btn:hover {
         background: var(--bg-secondary);
       }
+      .code-wrap-btn:active,
       .code-copy-btn:active,
       .diagram-copy-source-btn:active,
       .diagram-copy-svg-btn:active,
@@ -3175,6 +3213,7 @@ ${slidesHtml}
       .diagram-ascii-btn:active {
         background: var(--bg-tertiary);
       }
+      .code-wrap-btn.active,
       .diagram-ascii-btn.active,
       .diagram-ascii-diagram-btn.active {
         background: var(--link);
