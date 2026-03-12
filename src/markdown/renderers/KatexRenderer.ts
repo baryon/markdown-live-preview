@@ -121,10 +121,11 @@ export class KatexRenderer {
       },
     );
 
-    // Protect inline code spans (`` `...` `` and ``` ``...`` ```) from math extraction
+    // Protect inline code spans from math extraction
+    // Match `...`, ``...``, ```...``` on a single line (no newlines in content)
     const inlineCodeSpans: string[] = [];
     result = result.replace(
-      /(`{1,3})(?!`)([\s\S]*?[^`])\1(?!`)/g,
+      /(```|``|`)([^\n]*?)\1/g,
       (match) => {
         const index = inlineCodeSpans.length;
         inlineCodeSpans.push(match);

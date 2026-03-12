@@ -146,20 +146,74 @@ export const showAdvanced = true
 
 支持：`export const/let/var`、内联 `{表达式}`、`style={{...}}` / `className` 转换、`.map()` 迭代、`&&` / 三元条件渲染、多行 JSX 块。`.mdx` 文件中的代码块、KaTeX 数学公式、Mermaid 图表和 Recharts 图表均正常保留和渲染。
 
-### 数学公式
+### 数学公式 —— LaTeX 公式渲染
 
-使用 KaTeX（默认）或 MathJax 渲染 LaTeX 数学表达式：
+完整的 LaTeX 数学公式支持，由 [KaTeX](https://katex.org)（默认）或 [MathJax](https://www.mathjax.org) 驱动。数学表达式在 Markdown 处理之前提取，因此 `<`、`>`、`&`、`\` 等符号不会被 HTML 转义破坏。
+
+#### 行内公式
+
+使用 `$...$` 或 `\(...\)` 书写行内公式：
 
 ```markdown
-行内公式：$E = mc^2$
+方程 $E = mc^2$ 改变了物理学。
 
-块级公式：
-$$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-$$
+临界边界满足 $d_c > 0$ 且 $\det G < 0$。
+
+反斜杠形式：\(a^2 + b^2 = c^2\)
 ```
 
-分隔符可自定义。开箱即用支持 `$...$` / `$$...$$` 和 `\(...\)` / `\[...\]`。
+#### 块级公式
+
+使用 `$$...$$` 或 `\[...\]` 书写居中的块级公式：
+
+```markdown
+$$
+\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}
+$$
+
+$$
+\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u
+$$
+
+\[
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+\]
+```
+
+#### 支持的语法
+
+KaTeX 支持丰富的 LaTeX 命令：
+
+| 类别 | 示例 |
+|------|------|
+| **希腊字母** | `$\alpha, \beta, \gamma, \Omega$` |
+| **分数** | `$\frac{a}{b}$`、`$\dfrac{dy}{dx}$` |
+| **上下标** | `$x_i^2$`、`$a_{n+1}$` |
+| **根号** | `$\sqrt{x}$`、`$\sqrt[3]{8}$` |
+| **运算符** | `$\sum, \prod, \int, \lim, \det, \log$` |
+| **矩阵** | `\begin{pmatrix} a & b \\ c & d \end{pmatrix}` |
+| **比较** | `$a < b$`、`$x > 0$`、`$a \leq b$`、`$x \geq 0$` |
+| **箭头** | `$\to, \Rightarrow, \iff, \mapsto$` |
+| **重音** | `$\hat{x}, \bar{y}, \vec{v}, \dot{a}$` |
+| **数学中的文本** | `$\mathrm{info}$`、`$\text{where } x > 0$` |
+| **对齐方程** | `\begin{aligned} ... \end{aligned}` |
+
+#### 快捷操作
+
+鼠标悬停在块级公式上会显示操作按钮：
+
+- **TeX** — 复制 LaTeX 源码到剪贴板
+- **PNG** — 复制渲染后的公式为 PNG 图片
+
+#### 配置
+
+| 设置 | 默认值 | 描述 |
+|------|--------|------|
+| `mathRenderingOption` | `KaTeX` | 引擎：`KaTeX`、`MathJax` 或 `None` |
+| `math.inlineDelimiters` | `[["$","$"], ["\\(","\\)"]]` | 行内公式分隔符对 |
+| `math.blockDelimiters` | `[["$$","$$"], ["\\[","\\]"]]` | 块级公式分隔符对 |
+
+分隔符完全可自定义 —— 在 VS Code 设置中添加或移除任意分隔符对。
 
 ### 演示文稿 —— Marp
 

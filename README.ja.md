@@ -146,20 +146,74 @@ export const showAdvanced = true
 
 サポート：`export const/let/var`、インライン `{式}`、`style={{...}}` / `className` 変換、`.map()` イテレーション、`&&` / 三項条件レンダリング、複数行 JSX ブロック。`.mdx` ファイル内のコードブロック、KaTeX 数式、Mermaid ダイアグラム、Recharts チャートはすべて正常に保持・レンダリングされます。
 
-### 数式
+### 数式 —— LaTeX 数式レンダリング
 
-KaTeX（デフォルト）または MathJax で LaTeX 数式をレンダリング：
+[KaTeX](https://katex.org)（デフォルト）または [MathJax](https://www.mathjax.org) による完全な LaTeX 数式サポート。数式は Markdown 処理前に抽出されるため、`<`、`>`、`&`、`\` などの記号が HTML エスケープで壊れることはありません。
+
+#### インライン数式
+
+`$...$` または `\(...\)` でインライン数式を記述：
 
 ```markdown
-インライン：$E = mc^2$
+方程式 $E = mc^2$ は物理学を変えた。
 
-ブロック：
-$$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-$$
+臨界境界は $d_c > 0$ かつ $\det G < 0$ を満たす。
+
+バックスラッシュ形式：\(a^2 + b^2 = c^2\)
 ```
 
-区切り文字はカスタマイズ可能。`$...$` / `$$...$$` と `\(...\)` / `\[...\]` をそのままサポート。
+#### ブロック数式
+
+`$$...$$` または `\[...\]` で中央揃えのブロック数式を記述：
+
+```markdown
+$$
+\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}
+$$
+
+$$
+\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u
+$$
+
+\[
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+\]
+```
+
+#### サポートされる構文
+
+KaTeX は幅広い LaTeX コマンドに対応：
+
+| カテゴリ | 例 |
+|----------|-----|
+| **ギリシャ文字** | `$\alpha, \beta, \gamma, \Omega$` |
+| **分数** | `$\frac{a}{b}$`、`$\dfrac{dy}{dx}$` |
+| **上付き・下付き** | `$x_i^2$`、`$a_{n+1}$` |
+| **根号** | `$\sqrt{x}$`、`$\sqrt[3]{8}$` |
+| **演算子** | `$\sum, \prod, \int, \lim, \det, \log$` |
+| **行列** | `\begin{pmatrix} a & b \\ c & d \end{pmatrix}` |
+| **比較** | `$a < b$`、`$x > 0$`、`$a \leq b$`、`$x \geq 0$` |
+| **矢印** | `$\to, \Rightarrow, \iff, \mapsto$` |
+| **アクセント** | `$\hat{x}, \bar{y}, \vec{v}, \dot{a}$` |
+| **数式中のテキスト** | `$\mathrm{info}$`、`$\text{where } x > 0$` |
+| **連立方程式** | `\begin{aligned} ... \end{aligned}` |
+
+#### クイックアクション
+
+ブロック数式にマウスホバーするとアクションボタンが表示：
+
+- **TeX** — LaTeX ソースをクリップボードにコピー
+- **PNG** — レンダリングされた数式を PNG 画像としてコピー
+
+#### 設定
+
+| 設定 | デフォルト | 説明 |
+|------|-----------|------|
+| `mathRenderingOption` | `KaTeX` | エンジン：`KaTeX`、`MathJax`、または `None` |
+| `math.inlineDelimiters` | `[["$","$"], ["\\(","\\)"]]` | インライン数式区切り文字ペア |
+| `math.blockDelimiters` | `[["$$","$$"], ["\\[","\\]"]]` | ブロック数式区切り文字ペア |
+
+区切り文字は完全にカスタマイズ可能 —— VS Code 設定で任意の区切り文字ペアを追加・削除できます。
 
 ### プレゼンテーション —— Marp
 
