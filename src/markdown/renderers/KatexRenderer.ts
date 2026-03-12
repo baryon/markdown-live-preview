@@ -121,6 +121,17 @@ export class KatexRenderer {
       },
     );
 
+    // Protect inline code spans (`` `...` `` and ``` ``...`` ```) from math extraction
+    const inlineCodeSpans: string[] = [];
+    result = result.replace(
+      /(`{1,3})(?!`)([\s\S]*?[^`])\1(?!`)/g,
+      (match) => {
+        const index = inlineCodeSpans.length;
+        inlineCodeSpans.push(match);
+        return `INLINE_CODE_PLACEHOLDER_${index}`;
+      },
+    );
+
     const extractWithDelimiters = (
       text: string,
       startDelimiter: string,
@@ -166,6 +177,11 @@ export class KatexRenderer {
     for (const [start, end] of config.math.inlineDelimiters) {
       result = extractWithDelimiters(result, start, end, false);
     }
+
+    // Restore inline code spans
+    result = result.replace(/INLINE_CODE_PLACEHOLDER_(\d+)/g, (_, index) => {
+      return inlineCodeSpans[parseInt(index, 10)];
+    });
 
     // Restore code blocks
     result = result.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (_, index) => {
