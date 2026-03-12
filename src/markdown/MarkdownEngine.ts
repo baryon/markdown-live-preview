@@ -261,6 +261,7 @@ export class MarkdownEngine {
       <div class="page-tool-sep"></div>
       <button class="page-tool-btn" data-action="copy-page" title="Copy Page">Copy</button>
       <button class="page-tool-btn" data-action="copy-for-lark" title="Copy for Lark (飞书)">Lark</button>
+      <button class="page-tool-btn" data-action="save-pdf" title="Save as PDF">PDF</button>
       <div class="page-tool-sep"></div>
       <button class="page-tool-btn" data-action="side-by-side" title="Side by Side">SbS</button>
       <button class="page-tool-btn" data-action="edit-source" title="Edit Source">Edit</button>
@@ -4767,6 +4768,7 @@ setTimeout(function() {
     <div class="ctx-item" data-action="copy-page">Copy Page</div>
     <div class="ctx-item" data-action="copy-for-lark">Copy for Lark (飞书)</div>
     <div class="ctx-item" data-action="save-html">Save as HTML</div>
+    <div class="ctx-item" data-action="save-pdf">Save as PDF</div>
     <div class="ctx-sep"></div>
     <div class="ctx-item ctx-has-sub" data-action="preview-theme-switch">Preview Theme &#9656;
       <div class="ctx-submenu" id="ctx-preview-theme-sub"></div>
@@ -5408,6 +5410,15 @@ body.vscode-high-contrast .ctx-sep {
         if (vscode) {
           vscode.postMessage({
             command: 'saveAsHtml',
+            args: [document.documentElement.outerHTML]
+          });
+        }
+        break;
+
+      case 'save-pdf':
+        if (vscode) {
+          vscode.postMessage({
+            command: 'saveAsPdf',
             args: [document.documentElement.outerHTML]
           });
         }

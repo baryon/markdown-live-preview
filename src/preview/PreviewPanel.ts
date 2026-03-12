@@ -217,6 +217,12 @@ export class PreviewPanel {
       return;
     }
 
+    // Handle saveAsPdf — export preview to PDF via puppeteer-core
+    if (message.command === 'saveAsPdf') {
+      this.handleSaveAsPdf(message.args?.[0] as string);
+      return;
+    }
+
     // Handle downloadFile — save diagram as SVG/PNG via save dialog
     if (message.command === 'downloadFile') {
       const [filename, data, encoding] = (message.args || []) as [
@@ -318,6 +324,48 @@ export class PreviewPanel {
     } catch (err) {
       vscode.window.showErrorMessage(`Failed to save HTML: ${err}`);
     }
+  }
+
+  /**
+   * Handle "Save as PDF" action from the context menu
+   */
+  private async handleSaveAsPdf(htmlContent: string): Promise<void> {
+    if (!htmlContent) return;
+
+    const defaultName = `${path.basename(
+      this.sourceUri.fsPath,
+      path.extname(this.sourceUri.fsPath),
+    )}.pdf`;
+    const workspaceFolder = getWorkspaceFolderUri(this.sourceUri);
+    const defaultUri = workspaceFolder
+      ? vscode.Uri.joinPath(workspaceFolder, defaultName)
+      : vscode.Uri.file(
+          path.join(path.dirname(this.sourceUri.fsPath), defaultName),
+        );
+
+    const saveUri = await vscode.window.showSaveDialog({
+      defaultUri,
+      filters: { 'PDF Files': ['pdf'] },
+    });
+
+    if (!saveUri) return;
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Exporting PDF...',
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const { exportToPdf } = await import('../pdf/PdfExporter');
+          await exportToPdf(htmlContent, saveUri.fsPath);
+          vscode.window.showInformationMessage(`Saved to ${saveUri.fsPath}`);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to export PDF: ${err}`);
+        }
+      },
+    );
   }
 
   /**

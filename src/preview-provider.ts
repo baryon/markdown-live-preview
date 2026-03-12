@@ -221,6 +221,51 @@ export class PreviewProvider {
           (message) => {
             if (!message.command) return;
 
+            // Handle saveAsPdf — export preview to PDF via puppeteer-core
+            if (message.command === 'saveAsPdf') {
+              const htmlContent = message.args?.[0] as string;
+              if (!htmlContent) return;
+              const defaultName = `${path.basename(
+                sourceUri.fsPath,
+                path.extname(sourceUri.fsPath),
+              )}.pdf`;
+              const workspaceFolder = getWorkspaceFolderUri(sourceUri);
+              const defaultUri = workspaceFolder
+                ? vscode.Uri.joinPath(workspaceFolder, defaultName)
+                : vscode.Uri.file(
+                    path.join(path.dirname(sourceUri.fsPath), defaultName),
+                  );
+              vscode.window
+                .showSaveDialog({
+                  defaultUri,
+                  filters: { 'PDF Files': ['pdf'] },
+                })
+                .then(async (saveUri) => {
+                  if (!saveUri) return;
+                  await vscode.window.withProgress(
+                    {
+                      location: vscode.ProgressLocation.Notification,
+                      title: 'Exporting PDF...',
+                      cancellable: false,
+                    },
+                    async () => {
+                      try {
+                        const { exportToPdf } = await import('./pdf/PdfExporter');
+                        await exportToPdf(htmlContent, saveUri.fsPath);
+                        vscode.window.showInformationMessage(
+                          `Saved to ${saveUri.fsPath}`,
+                        );
+                      } catch (err) {
+                        vscode.window.showErrorMessage(
+                          `Failed to export PDF: ${err}`,
+                        );
+                      }
+                    },
+                  );
+                });
+              return;
+            }
+
             // Handle saveAsHtml — show save dialog and write HTML file
             if (message.command === 'saveAsHtml') {
               const htmlContent = message.args?.[0] as string;

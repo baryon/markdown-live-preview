@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -641,6 +641,7 @@
     "markdown-it-sub": "^2.0.0",
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
+    "puppeteer-core": "^24.0.0",
     "shiki": "^1.29.2",
     "sucrase": "^3.35.1",
     "yaml": "^2.7.0"
