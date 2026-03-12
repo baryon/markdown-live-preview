@@ -1,7 +1,7 @@
 {
   "name": "baryon-markdown-live-preview",
   "displayName": "%displayName%",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "%description%",
   "icon": "media/mlp.png",
   "categories": [
@@ -227,7 +227,10 @@
           "description": "%config.indentedCodeBlockSpaces.description%",
           "default": 2,
           "type": "number",
-          "enum": [2, 4],
+          "enum": [
+            2,
+            4
+          ],
           "enumDescriptions": [
             "%config.indentedCodeBlockSpaces.enumDescription.0%",
             "%config.indentedCodeBlockSpaces.enumDescription.1%"

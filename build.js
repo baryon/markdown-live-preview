@@ -63,7 +63,7 @@ const nativeConfig = {
   outfile: './out/native/extension.js',
   target: 'node16',
   format: 'cjs',
-  external: ['vscode', 'puppeteer-core'],
+  external: ['vscode'],
   sourcemap: true,
 };
 

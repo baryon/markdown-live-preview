@@ -14,7 +14,6 @@ flake.lock
 flake.nix
 shell.nix
 node_modules/**
-!node_modules/puppeteer-core/**
 build.js
 biome.json
 pnpm-lock.yaml
