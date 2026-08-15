@@ -1,3 +1,5 @@
+
+
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 # Markdown Live Preview
@@ -420,6 +422,7 @@ All settings are under the `markdown-live-preview` namespace. Key options:
 | `mathRenderingOption` | `KaTeX` | Math rendering engine |
 | `scrollSync` | `true` | Bidirectional scroll sync |
 | `liveUpdate` | `true` | Real-time preview updates |
+| `liveUpdateDebounceMs` | `300` | Debounce interval for live updates (ms) |
 | `breakOnSingleNewLine` | `true` | GFM-style line breaks |
 | `enableScriptExecution` | `false` | Code chunk execution |
 | `enableWikiLinkSyntax` | `true` | Wiki link support |
